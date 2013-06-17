@@ -1,0 +1,22 @@
+Package: DataHandlers
+Type: Package
+Title: Methods for handling test data
+Version: 0.0.1
+Date: 2013-06-16
+Author: Mark Hochguertel
+Maintainer: Mark Hochguertel <markhocky@gmail.com>
+Description: Methods to get test data from the internet, and handling file
+    operations
+License: GPL-2
+LazyLoad: yes
+LazyData: yes
+Depends:
+    R (>= 2.15.0),
+    methods,
+    quantmod,
+    FinancialInstrument
+Suggests:
+    devtools,
+    testthat
+Collate:
+    'StockDataHandling.R'
