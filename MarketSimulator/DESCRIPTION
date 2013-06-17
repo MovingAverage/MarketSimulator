@@ -1,0 +1,21 @@
+Package: MarketSimulator
+Type: Package
+Title: Simple market simulator for backtesting
+Version: 0.0.1
+Date: 2013-06-16
+Author: Mark Hochguertel
+Maintainer: Mark Hochguertel <markhocky@gmail.com>
+Description: Simple OHLCV simulator for trading system testing
+License: GPL-2
+LazyLoad: yes
+LazyData: yes
+Depends:
+    R (>= 3.0.0),
+    methods,
+    quantmod,
+    DataHandlers
+Suggests:
+    devtools,
+    testthat
+Collate:
+    'Broker.R'
