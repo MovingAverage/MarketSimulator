@@ -38,3 +38,69 @@ context("Reading market data")
 
 context("Order handling")
 
+	test_that("Broker only accepts orders of class 'MarketOrder'", {
+				
+				broker <- new("Broker")
+				expect_that(addOrder(broker, list()), throws_error())
+			})
+	
+	test_that("Broker stores open orders", {
+				
+				order1 <- Mock("MarketOrder")
+				order2 <- Mock("MarketOrder")
+				broker <- new("Broker")
+				broker <- addOrder(broker, order1)
+				broker <- addOrder(broker, order2)
+				
+				expect_that(broker@orders, matchesObject(list(order1, order2)))
+			})
+	
+	test_that("Broker notifies orders of new price bar", {
+				
+				broker <- new("Broker")
+				market <- Mock("list")
+				AMP <- loadStocks("AMP.AX")[[1]]
+				mockMethod(market, "getMarketInstrument", AMP)
+				
+				order1 <- Mock("MarketOrder")
+				order2 <- Mock("MarketOrder")
+				mockMethod(list(order1, order2), "notifyOrder")
+				
+				broker <- addMarket(broker, market)
+				broker <- addOrder(broker, order1)
+				broker <- addOrder(broker, order2)
+				
+				price.bar <- AMP[1, ]
+				notifyOrders(broker, price.bar)
+				
+				expect_that(order1, called_once_with("notifyOrder", broker, price.bar))
+				expect_that(order2, called_once_with("notifyOrder", broker, price.bar))
+			})
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
