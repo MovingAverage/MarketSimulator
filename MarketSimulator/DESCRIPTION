@@ -19,3 +19,4 @@ Suggests:
     testthat
 Collate:
     'Broker.R'
+    'MarketOrders.R'
