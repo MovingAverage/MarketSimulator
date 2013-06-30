@@ -18,5 +18,7 @@ Suggests:
     devtools,
     testthat
 Collate:
-    'Broker.R'
+    'Generics.R'
     'MarketOrders.R'
+    'Market.R'
+    'Broker.R'
