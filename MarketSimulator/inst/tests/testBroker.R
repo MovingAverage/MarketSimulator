@@ -89,7 +89,6 @@ context("Order handling")
 	test_that("Broker notifies orders of new price bar", {
 				
 				broker <- Broker()
-				AMP <- loadStocks("AMP.AX")[[1]]
 				
 				order1 <- Mock("MarketOrder")
 				order2 <- Mock("MarketOrder")
@@ -99,7 +98,7 @@ context("Order handling")
 				addOrder(broker, order1)
 				addOrder(broker, order2)
 				
-				price.bar <- AMP[1, ]
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
 				notifyOrders(broker, "AMP", price.bar)
 				
 				expect_that(order1, called_once_with("notify", broker, price.bar))

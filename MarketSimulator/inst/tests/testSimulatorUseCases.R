@@ -30,7 +30,7 @@ context("Order execution")
 				expect_that(execution_price(bhp.orders[[1]]), matchesObject(bhp.open))
 			})
 	
-	test_that("Stop set and executed on day", {
+	test_that("Sell Stop set and executed on day", {
 				
 				AMP.bar <- loadStocks("AMP.AX")[[1]][2]
 				AMP.bar[, "AMP.AX.Open"] <- 10.0
@@ -55,7 +55,7 @@ context("Order execution")
 				expect_that(status(amp.orders[[2]]), matchesObject("closed"))
 			})
 	
-	test_that("Stop set but not executed on day", {
+	test_that("Sell Stop set but not executed on day", {
 				
 				AMP.bar <- loadStocks("AMP.AX")[[1]][2]
 				AMP.bar[, "AMP.AX.Open"] <- 10.0

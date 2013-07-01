@@ -59,7 +59,7 @@ context("Market order on open processing")
 				AMP <- loadStocks("AMP.AX")[[1]]
 				price.bar <- AMP[2]
 				
-				order <- Order("AMP.AX", 100)
+				order <- Order("AMP.AX", buy = 100)
 				expected.order <- order
 				expected.order@status <- "closed"
 				expected.order@execution.price <- Op(price.bar)
@@ -80,7 +80,7 @@ context("Market order on open processing")
 				zero.open[, "AMP.AX.Open"] <- 0
 				
 				broker <- Broker()
-				order <- Order("AMP.AX", 100)
+				order <- Order("AMP.AX", buy = 100)
 				addOrder(broker, order)
 				
 				notify(order, broker, missing.volume)
@@ -105,8 +105,25 @@ context("Stop loss order processing")
 				expect_that(Stop("AMP.AX", sell = 100), throws_error())
 				expect_that(is(stop.loss, "Order"), is_true())
 			})
-
-	test_that("Stop loss executes sell when limit breached", {
+	
+	test_that("Stop order takes no action when market inactive", {
+				
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				price.bar[, "AMP.AX.Open"] <- 10.0
+				price.bar[, "AMP.AX.Low"] <- 9.90
+				price.bar[, "AMP.AX.Volume"] <- 0
+				
+				order <- Stop("AMP", buy = 100, at = Op(price.bar))
+				order <- setID(order, 1)
+				broker <- Broker()
+				addOrder(broker, order)
+				notify(order, broker, price.bar)
+				order <- getOrders(broker, "AMP")[[1]]
+				
+				expect_that(status(order), equals("open"))
+			})
+	
+	test_that("Sell Stop loss executes when limit breached during day", {
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "updateOrder")
@@ -116,13 +133,153 @@ context("Stop loss order processing")
 				expected.order@status <- "closed"
 				expected.order@execution.price <- limit_price(stop.order)
 
-				order <- notify(stop.order, broker, AMP[2])
+				notify(stop.order, broker, AMP[2])
 				
 				expect_that(broker, called_once_with("updateOrder", expected.order))
 			})
 	
+	test_that("Sell Stop loss executes when limit breached at open", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "updateOrder")
+				AMP <- loadStocks("AMP.AX")[[1]]
+				stop.order <- Stop("AMP.AX", sell = 100, at = Op(AMP[2]) + 0.01)
+				expected.order <- stop.order
+				expected.order@status <- "closed"
+				expected.order@execution.price <- Op(AMP[2])
+				
+				notify(stop.order, broker, AMP[2])
+				
+				expect_that(broker, called_once_with("updateOrder", expected.order))
+			})
+	
+	test_that("Buy Stop loss executes when limit breached during day", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "updateOrder")
+				AMP <- loadStocks("AMP.AX")[[1]]
+				stop.order <- Stop("AMP.AX", buy = 100, at = Op(AMP[2]) + 0.01)
+				
+				expected.order <- stop.order
+				expected.order@status <- "closed"
+				expected.order@execution.price <- limit_price(stop.order)
+				
+				notify(stop.order, broker, AMP[2])
+				
+				expect_that(broker, called_once_with("updateOrder", expected.order))
+			})
+	
+	test_that("Buy Stop loss executes when limit breached at open", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "updateOrder")
+				AMP <- loadStocks("AMP.AX")[[1]]
+				stop.order <- Stop("AMP.AX", buy = 100, at = Op(AMP[2]) - 0.01)
+				
+				expected.order <- stop.order
+				expected.order@status <- "closed"
+				expected.order@execution.price <- Op(AMP[2])
+				
+				notify(stop.order, broker, AMP[2])
+				
+				expect_that(broker, called_once_with("updateOrder", expected.order))
+			})
+
+	
+context("Limit order processing")
+
+	test_that("Creating Limit orders", {
+				
+				limit.order <- Limit("AMP", buy = 100, at = xts())
+				expect_that(is(limit.order, "Order"), is_true())
+				expect_that(instrumentOf(limit.order), equals("AMP"))
+			})
+	
+	test_that("Limit order takes no action when market inactive", {
+				
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				price.bar[, "AMP.AX.Open"] <- 10.0
+				price.bar[, "AMP.AX.Low"] <- 9.90
+				price.bar[, "AMP.AX.Volume"] <- 0
+				
+				order <- Limit("AMP", buy = 100, at = Op(price.bar))
+				order <- setID(order, 1)
+				broker <- Broker()
+				addOrder(broker, order)
+				notify(order, broker, price.bar)
+				order <- getOrders(broker, "AMP")[[1]]
+				
+				expect_that(status(order), equals("open"))
+			})
+	
+	test_that("Buy Limit executes when target price breached during day", {
+				
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				price.bar[, "AMP.AX.Open"] <- 10.0
+				price.bar[, "AMP.AX.Low"] <- 9.90
+				
+				order <- Limit("AMP", buy = 100, at = Op(price.bar) - 0.05)
+				order <- setID(order, 1)
+				broker <- Broker()
+				addOrder(broker, order)
+				notify(order, broker, price.bar)
+				order <- getOrders(broker, "AMP")[[1]]
+				
+				expect_that(status(order), equals("closed"))
+				expect_that(execution_price(order), equals(limit_price(order)))
+			})
+	
+	test_that("Buy Limit executes when target price breached at open", {
+				
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				price.bar[, "AMP.AX.Open"] <- 10.0
+				price.bar[, "AMP.AX.Low"] <- 9.90
+				
+				order <- Limit("AMP", buy = 100, at = Op(price.bar) + 0.05)
+				order <- setID(order, 1)
+				broker <- Broker()
+				addOrder(broker, order)
+				notify(order, broker, price.bar)
+				order <- getOrders(broker, "AMP")[[1]]
+				
+				expect_that(status(order), equals("closed"))
+				expect_that(execution_price(order), equals(Op(price.bar)))
+			})
 	
 	
+	test_that("Sell Limit executes when target price breached during day", {
+				
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				price.bar[, "AMP.AX.Open"] <- 10.0
+				price.bar[, "AMP.AX.High"] <- 10.10
+				
+				order <- Limit("AMP", sell = 100, at = Op(price.bar) + 0.05)
+				order <- setID(order, 1)
+				broker <- Broker()
+				addOrder(broker, order)
+				notify(order, broker, price.bar)
+				order <- getOrders(broker, "AMP")[[1]]
+				
+				expect_that(status(order), equals("closed"))
+				expect_that(execution_price(order), equals(limit_price(order)))
+			})
+	
+	test_that("Sell Limit executes when target price breached at open", {
+				
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				price.bar[, "AMP.AX.Open"] <- 10.0
+				price.bar[, "AMP.AX.High"] <- 10.10
+				
+				order <- Limit("AMP", sell = 100, at = Op(price.bar) - 0.05)
+				order <- setID(order, 1)
+				broker <- Broker()
+				addOrder(broker, order)
+				notify(order, broker, price.bar)
+				order <- getOrders(broker, "AMP")[[1]]
+				
+				expect_that(status(order), matchesObject("closed"))
+				expect_that(execution_price(order), equals(Op(price.bar)))
+			})
 	
 	
 	
