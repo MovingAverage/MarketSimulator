@@ -3,10 +3,11 @@
 setClass("Order", 
 		representation(
 			instrument = "character",
-			ID = "numeric", 
+			ID = "integer", 
 			status = "character",
 			quantity = "integer",
-			execution.price = "xts"
+			execution.price = "xts", 
+			txn.cost.model = "function"
 		))
 
 instrumentOf <- function(order) {
@@ -32,6 +33,34 @@ quantity <- function(order) {
 
 execution_price <- function(order) {
 	return(order@execution.price)
+}
+
+setTxnCostModel <- function(order, model) {
+	order@txn.cost.model <- model
+	return(order)
+}
+
+txnFees <- function(order) {
+	return(order@txn.cost.model(order))
+}
+
+bookEntry <- function(order) {
+	
+	ordertemplate <- xts(t(c(
+							"Order.Qty" = quantity(order), 
+							"Order.Price" = execution_price(order), 
+							"Order.Type" = class(order), 
+							"Order.Side" = "long",
+							"Order.Threshold" = 0, 
+							"Order.Status" = status(order), 
+							"Order.StatusTime" = as.character(as.POSIXct(timestamp)), 
+							"Prefer" = "", 
+							"Order.Set" = "", 
+							"Txn.Fees" = txnFees(order), 
+							"Rule" = "")), 
+			order.by = as.POSIXct(timestamp))
+	
+	return(ordertemplate)
 }
 
 #' notify order of market activity

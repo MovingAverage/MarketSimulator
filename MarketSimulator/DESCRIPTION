@@ -22,3 +22,5 @@ Collate:
     'MarketOrders.R'
     'Market.R'
     'Broker.R'
+    'Manager.R'
+    'Account.R'

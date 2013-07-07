@@ -21,8 +21,8 @@ context("Order execution")
 				addOrder(broker, Order("BHP.AX", sell = 100))
 				
 				market.report <- marketActivity(broker, timestamp)
-				amp.orders <- getOrders(broker, "AMP.AX")
-				bhp.orders <- getOrders(broker, "BHP.AX")
+				amp.orders <- closedOrders(broker, "AMP.AX")
+				bhp.orders <- closedOrders(broker, "BHP.AX")
 				
 				expect_that(status(amp.orders[[1]]), matchesObject("closed"))
 				expect_that(status(bhp.orders[[1]]), matchesObject("closed"))
@@ -49,7 +49,7 @@ context("Order execution")
 				addOrder(broker, Stop("AMP.AX", sell = 100, at = Op(AMP.bar) * 0.99))
 				
 				marketActivity(broker, timestamp)
-				amp.orders <- getOrders(broker, "AMP.AX")
+				amp.orders <- closedOrders(broker, "AMP.AX")
 				
 				expect_that(status(amp.orders[[1]]), matchesObject("closed"))
 				expect_that(status(amp.orders[[2]]), matchesObject("closed"))
@@ -74,10 +74,11 @@ context("Order execution")
 				addOrder(broker, Stop("AMP.AX", sell = 100, at = Op(AMP.bar) * 0.99))
 				
 				marketActivity(broker, timestamp)
-				amp.orders <- getOrders(broker, "AMP.AX")
+				open.orders <- openOrders(broker, "AMP.AX")
+				closed.orders <- closedOrders(broker, "AMP.AX")
 				
-				expect_that(status(amp.orders[[1]]), matchesObject("closed"))
-				expect_that(status(amp.orders[[2]]), matchesObject("open"))
+				expect_that(status(closed.orders[[1]]), matchesObject("closed"))
+				expect_that(status(open.orders[[1]]), matchesObject("open"))
 			})
 	
 
