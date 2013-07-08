@@ -7,7 +7,9 @@ setClass("Order",
 			status = "character",
 			quantity = "integer",
 			execution.price = "xts", 
-			txn.cost.model = "function"
+			txn.cost.model = "function", 
+			submission.time = "POSIXct", 
+			status.time = "POSIXct"
 		))
 
 instrumentOf <- function(order) {
@@ -44,8 +46,27 @@ txnFees <- function(order) {
 	return(order@txn.cost.model(order))
 }
 
+"submissionTime<-" <- function(order, value) {
+	order@submission.time <- as.POSIXct(value)
+	return(order)
+}
+
+submissionTime <- function(order) {
+	return(order@submission.time)
+}
+
+"statusTime<-" <- function(order, value) {
+	order@status.time <- as.POSIXct(value)
+	return(order)
+}
+
+statusTime <- function(order) {
+	return(order@status.time)
+}
+
 bookEntry <- function(order) {
 	
+	timestamp <- as.Date("2010-04-20")
 	ordertemplate <- xts(t(c(
 							"Order.Qty" = quantity(order), 
 							"Order.Price" = execution_price(order), 
@@ -58,7 +79,7 @@ bookEntry <- function(order) {
 							"Order.Set" = "", 
 							"Txn.Fees" = txnFees(order), 
 							"Rule" = "")), 
-			order.by = as.POSIXct(timestamp))
+			order.by = submissionTime(order))
 	
 	return(ordertemplate)
 }
@@ -77,6 +98,9 @@ bookEntry <- function(order) {
 #' 
 setGeneric("notify",
 		function(order, broker, price.bar, ...) {
+			if (submissionTime(order) == initDate()) {
+				submissionTime(order) <- index(price.bar)
+			}
 			if (are_related(order, price.bar) && active_market(price.bar)) {
 				standardGeneric("notify")
 			}
@@ -99,6 +123,7 @@ not_NA_or_Zero <- function(value) {
 execute <- function(order, at, broker) {
 	order@execution.price <- at
 	order@status <- "closed"
+	statusTime(order) <- index(at)
 	updateOrder(broker, order)
 }
 
@@ -129,7 +154,9 @@ Order <- function(instrument, buy = NULL, sell = NULL) {
 			instrument = instrument, 
 			status = "open",
 			quantity = quantity,
-			execution.price = xts())
+			execution.price = xts(), 
+			submission.time = initDate(), 
+			status.time = initDate())
 	return(order)
 }
 
@@ -179,14 +206,18 @@ Limit <- function(instrument, buy = NULL, sell = NULL, at) {
 				status = "open",
 				quantity = -abs(as.integer(sell)),
 				execution.price = xts(), 
-				limit.price = at)
+				limit.price = at, 
+				submission.time = initDate(), 
+				status.time = initDate())
 	} else {
 		order <- new("BuyLimitOrder", 
 				instrument = instrument, 
 				status = "open",
 				quantity = abs(as.integer(buy)),
 				execution.price = xts(), 
-				limit.price = at)
+				limit.price = at, 
+				submission.time = initDate(), 
+				status.time = initDate())
 	}
 	return(order)
 }
@@ -243,14 +274,18 @@ Stop <- function(instrument, buy = NULL, sell = NULL, at) {
 				status = "open",
 				quantity = -abs(as.integer(sell)),
 				execution.price = xts(), 
-				limit.price = at)
+				limit.price = at, 
+				submission.time = initDate(), 
+				status.time = initDate())
 	} else {
 		order <- new("BuyStopLoss", 
 				instrument = instrument, 
 				status = "open",
 				quantity = abs(as.integer(buy)),
 				execution.price = xts(), 
-				limit.price = at)
+				limit.price = at, 
+				submission.time = initDate(), 
+				status.time = initDate())
 	}
 	return(order)
 }

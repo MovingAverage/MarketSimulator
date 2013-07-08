@@ -1,6 +1,5 @@
 #'
 #'
-
 setClass("Market",
 		representation(
 			instruments = "list"

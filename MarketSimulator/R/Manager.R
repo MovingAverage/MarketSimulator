@@ -25,3 +25,37 @@ balancePositions <- function(current.positions, ideal.positions) {
 	return(ideal.positions)
 }
 
+createOrders <- function(manger, broker, changes) {
+	
+	current.equity <- currentEquity(broker)
+	latest.prices <- latestPrices(broker)
+	
+	for (instrument in names(changes)) {
+		position.size <- current.equity * changes[instrument] / latest.prices[instrument]
+		order <- Order(instrument, buy = position.size)
+		addOrder(broker, order)
+	}
+}
+
+
+
+
+BackTest <- function(manager, broker, start.date, end.date) {
+	
+	for (timestamp in as.character(seq.Date(start.date, end.date, by = 1))) {
+		timestamp <- as.Date(timestamp)
+		placeOrders(manager, broker, timestamp)
+		marketActivity(broker, timestamp)
+	}
+	return(broker)
+}
+
+placeOrders <- function(manager, broker, timestamp) {
+	
+	if (timestamp == as.Date("2013-06-07")) {
+		addOrder(broker, Order("AMP.AX", buy = 100))
+	}
+	if (timestamp == as.Date("2013-06-13")) {
+		addOrder(broker, Order("AMP.AX", sell = 100))
+	}
+}

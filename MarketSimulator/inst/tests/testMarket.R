@@ -25,3 +25,5 @@ context("Instrument values")
 				expect_that(getBar(market, "AMP.AX", timestamp), 
 						matchesObject(AMP[[1]][1]))
 			})
+
+	

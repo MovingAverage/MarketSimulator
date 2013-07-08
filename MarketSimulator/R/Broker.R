@@ -20,15 +20,15 @@ default_cost_model <- function(order) {
 	return(0)
 }
 
-addMarket <- function(broker, market) {
-			broker@market <- market
-			return(broker)
-		}
-		
 addTxnCostModel <- function(broker, model) {
 	broker@cost.model <- model
 	return(broker)
 }
+
+addMarket <- function(broker, market) {
+			broker@market <- market
+			return(broker)
+		}
 
 setMethod("getBar",
 		signature("Broker"),
@@ -116,39 +116,66 @@ notifyOrders <- function(broker, instrument, price.bar) {
 	}
 }
 
+#' Print closed orders as quantstrat order_book object
 printOrderBook <- function(broker, portfolio) {
 	
 	print_orders <- function(order.list) {
 
-		timestamp <- "1999-12-31"
-		order_book <- xts(t(c(
+		timestamp <- as.POSIXct(initDate())
+		order.book <- xts(t(c(
 								"Order.Qty" = 0, 
 								"Order.Price" = NA, 
 								"Order.Type" = "init", 
 								"Order.Side" = "long",
 								"Order.Threshold" = 0, 
 								"Order.Status" = "closed", 
-								"Order.StatusTime" = as.character(as.POSIXct(timestamp)), 
+								"Order.StatusTime" = as.character(timestamp), 
 								"Prefer" = "", 
 								"Order.Set" = "", 
 								"Txn.Fees" = 0, 
 								"Rule" = "")), 
-				order.by = as.POSIXct(timestamp))
+				order.by = timestamp)
 		
 		for (order in order.list) {
-			order_book <- rbind(order_book, bookEntry(order))
+			order.book <- rbind(order.book, bookEntry(order))
 		}
-		return(order_book)
+		return(order.book)
 	}
 	
 	
-	order.book <- list()
-	order.book[[portfolio]] <- lapply(as.list(broker@closed.orders), print_orders)
-	class(order.book) <- "order_book"
-	return(order.book)
+	order_book <- list()
+	order_book[[portfolio]] <- lapply(as.list(broker@closed.orders), print_orders)
+	class(order_book) <- "order_book"
+	return(order_book)
 }
 
-
+#' Updates named portfolio with executed transactions
+#' 
+#' This function is used to integrate MarketSimulator with the blotter package.
+#' The PortfolioTxns function adds transactions to the portfolio with blotter:addTxn, 
+#' which then allows further analysis and reporting to be done with blotter functionality.
+#' 
+#' @param broker the Broker object which contains the closed orders
+#' @param portfolio a character string naming the portfolio for recording transactions.
+#' @param verbose logical indicating whether each transaction is to be printed.
+#' 
+portfolioTxns <- function(broker, portfolio, verbose = TRUE) {
+	
+	for (instrument in tradedInstruments(broker)) {
+		for (order in closedOrders(broker, instrument)) {
+			
+			addTxn(portfolio, instrument, 
+					TxnDate = statusTime(order), 
+					TxnQty = quantity(order), 
+					TxnPrice = execution_price(order), 
+					TxnFees = txnFees(order), 
+					verbose = verbose)
+			
+		}
+	}
+	
+	
+}
 
 
 

@@ -9,4 +9,6 @@ setGeneric("getBar",
 			standardGeneric("getBar")
 		})
 
-
+initDate <- function() {
+	return(as.POSIXct("1999-12-31"))
+}

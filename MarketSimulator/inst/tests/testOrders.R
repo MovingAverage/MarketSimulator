@@ -35,17 +35,70 @@ context("Order creation")
 				expect_that(instrumentOf(limit.order), matchesObject(ticker))
 			})
 
+context("Order time stamping")
+
+	test_that("Order timestamped on first notify", {
+				
+				timestamp <- as.POSIXct("2010-04-20")
+				price.bar <- xts(t(c("AMP.Open" = 10, "AMP.Volume" = 1000)), 
+						order.by = timestamp)
+				broker <- Mock("Broker")
+				mockMethod(broker, "updateOrder")
+				
+				order <- Order("AMP", buy = 100)
+				notify(order, broker, price.bar)
+				
+				notified.order <- get_call_argument(broker, "updateOrder", 1)
+				
+				expect_that(submissionTime(notified.order), matchesObject(timestamp))
+			})
+	
+	test_that("Order not timestamped if already done", {
+				
+				original.timestamp <- as.POSIXct("2010-04-20")
+				new.timestamp <- as.POSIXct("2010-04-21")
+				price.bar <- xts(t(c("AMP.Open" = 10, "AMP.Volume" = 1000)), 
+						order.by = new.timestamp)
+				broker <- Mock("Broker")
+				mockMethod(broker, "updateOrder")
+				
+				order <- Order("AMP", buy = 100)
+				submissionTime(order) <- original.timestamp
+				notify(order, broker, price.bar)
+				
+				notified.order <- get_call_argument(broker, "updateOrder", 1)
+				
+				expect_that(submissionTime(notified.order), 
+						matchesObject(original.timestamp))
+			})
+	
+	test_that("Order timestamped when status changed", {
+				
+				timestamp <- as.POSIXct("2010-04-21")
+				price.bar <- xts(t(c("AMP.Open" = 10, "AMP.Volume" = 1000)), 
+						order.by = timestamp)
+				broker <- Mock("Broker")
+				mockMethod(broker, "updateOrder")
+				
+				order <- Order("AMP", buy = 100)
+				notify(order, broker, price.bar)
+				
+				notified.order <- get_call_argument(broker, "updateOrder", 1)
+				
+				expect_that(statusTime(notified.order), matchesObject(timestamp))
+			})
 	
 context("Order printing")
 
 	test_that("Orders print as per blotter order book", {
 				
-				timestamp <- as.Date("2010-04-20")
+				timestamp <- as.POSIXct("2010-04-20")
 				price.bar <- xts(10.0, order.by = timestamp)
 				order <- Order("AMP", buy = 100)
 				order@status <- "closed"
 				order@execution.price <- price.bar
 				order@txn.cost.model <- default_cost_model
+				submissionTime(order) <- timestamp
 				
 				output <- bookEntry(order)
 				
@@ -54,6 +107,7 @@ context("Order printing")
 						"Order.StatusTime", "Prefer", "Order.Set", "Txn.Fees", "Rule")
 				
 				expect_that(names(output), matchesObject(expected.names))
+				expect_that(index(output), matchesObject(timestamp))
 				expect_that(output[, "Order.Qty"], matchesObject("100"))
 				expect_that(output[, "Order.Price"], matchesObject("10"))
 				expect_that(output[, "Order.Status"], matchesObject("closed"))
@@ -90,6 +144,8 @@ context("Market order on open processing")
 				expected.order <- order
 				expected.order@status <- "closed"
 				expected.order@execution.price <- Op(price.bar)
+				submissionTime(expected.order) <- index(price.bar)
+				statusTime(expected.order) <- index(price.bar)
 				
 				notify(order, broker, price.bar)
 				
@@ -154,13 +210,15 @@ context("Stop loss order processing")
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "updateOrder")
-				AMP <- loadStocks("AMP.AX")[[1]]
-				stop.order <- Stop("AMP.AX", sell = 100, at = Op(AMP[2]) - 0.01)
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				stop.order <- Stop("AMP.AX", sell = 100, at = Op(price.bar) - 0.01)
 				expected.order <- stop.order
 				expected.order@status <- "closed"
 				expected.order@execution.price <- limit_price(stop.order)
+				submissionTime(expected.order) <- index(price.bar)
+				statusTime(expected.order) <- index(price.bar)
 
-				notify(stop.order, broker, AMP[2])
+				notify(stop.order, broker, price.bar)
 				
 				expect_that(broker, called_once_with("updateOrder", expected.order))
 			})
@@ -169,13 +227,15 @@ context("Stop loss order processing")
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "updateOrder")
-				AMP <- loadStocks("AMP.AX")[[1]]
-				stop.order <- Stop("AMP.AX", sell = 100, at = Op(AMP[2]) + 0.01)
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				stop.order <- Stop("AMP.AX", sell = 100, at = Op(price.bar) + 0.01)
 				expected.order <- stop.order
 				expected.order@status <- "closed"
-				expected.order@execution.price <- Op(AMP[2])
+				expected.order@execution.price <- Op(price.bar)
+				submissionTime(expected.order) <- index(price.bar)
+				statusTime(expected.order) <- index(price.bar)
 				
-				notify(stop.order, broker, AMP[2])
+				notify(stop.order, broker, price.bar)
 				
 				expect_that(broker, called_once_with("updateOrder", expected.order))
 			})
@@ -184,14 +244,16 @@ context("Stop loss order processing")
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "updateOrder")
-				AMP <- loadStocks("AMP.AX")[[1]]
-				stop.order <- Stop("AMP.AX", buy = 100, at = Op(AMP[2]) + 0.01)
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				stop.order <- Stop("AMP.AX", buy = 100, at = Op(price.bar) + 0.01)
 				
 				expected.order <- stop.order
 				expected.order@status <- "closed"
 				expected.order@execution.price <- limit_price(stop.order)
+				submissionTime(expected.order) <- index(price.bar)
+				statusTime(expected.order) <- index(price.bar)
 				
-				notify(stop.order, broker, AMP[2])
+				notify(stop.order, broker, price.bar)
 				
 				expect_that(broker, called_once_with("updateOrder", expected.order))
 			})
@@ -200,14 +262,16 @@ context("Stop loss order processing")
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "updateOrder")
-				AMP <- loadStocks("AMP.AX")[[1]]
-				stop.order <- Stop("AMP.AX", buy = 100, at = Op(AMP[2]) - 0.01)
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				stop.order <- Stop("AMP.AX", buy = 100, at = Op(price.bar) - 0.01)
 				
 				expected.order <- stop.order
 				expected.order@status <- "closed"
-				expected.order@execution.price <- Op(AMP[2])
+				expected.order@execution.price <- Op(price.bar)
+				submissionTime(expected.order) <- index(price.bar)
+				statusTime(expected.order) <- index(price.bar)
 				
-				notify(stop.order, broker, AMP[2])
+				notify(stop.order, broker, price.bar)
 				
 				expect_that(broker, called_once_with("updateOrder", expected.order))
 			})
@@ -250,6 +314,8 @@ context("Limit order processing")
 				expected.order <- order
 				expected.order@status <- "closed"
 				expected.order@execution.price <- limit_price(order)
+				submissionTime(expected.order) <- index(price.bar)
+				statusTime(expected.order) <- index(price.bar)
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "updateOrder")

@@ -97,7 +97,20 @@ context("Order handling")
 				expect_that(length(orders), equals(1))
 				expect_that(status(orders[[1]]), equals("closed"))
 			})
+
+context("Notifications of market activity")
 	
+	test_that("Broker does nothing if no active orders", {
+				
+				broker <- Broker()
+				market <- Mock("Market")
+				mockMethod(market, "getBar")
+				
+				marketActivity(broker, as.Date("2010-03-05"))
+				
+				expect_that(market, not_called("getBar"))
+			})
+
 	test_that("Broker notifies orders of new price bar", {
 				
 				broker <- Broker()
@@ -106,6 +119,7 @@ context("Order handling")
 				order2 <- Mock("MarketOrder")
 				mockMethod(list(order1, order2), "notify", order1)
 				mockMethod(list(order1, order2), "instrumentOf", "AMP")
+				mockMethod(list(order1, order2), "submissionTime", initDate())
 				addOrder(broker, order1)
 				addOrder(broker, order2)
 				
@@ -171,6 +185,8 @@ context("Order book storage")
 				
 				mockMethod(list(open.order1, open.order2, closed.order), "instrumentOf", 
 						return.value = "AMP.AX")
+				mockMethod(list(open.order1, open.order2, closed.order), "submissionTime", 
+						return.value = initDate())
 				mockMethod(list(open.order1, open.order2, closed.order), "notify")
 				
 				broker <- Broker()
