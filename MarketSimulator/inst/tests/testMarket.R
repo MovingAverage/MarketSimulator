@@ -13,6 +13,14 @@ context("Market creation")
 				expect_that(length(market@instruments), equals(1))
 				expect_that(market@instruments[[1]], matchesObject(AMP[[1]]))
 			})
+	
+	test_that("Market lists instruments", {
+				
+				instruments <- c("AMP.AX", "BHP.AX")
+				market <- Market(loadStocks(instruments))
+				
+				expect_that(tradeableInstruments(market), matchesObject(instruments))
+			})
 
 context("Instrument values")
 

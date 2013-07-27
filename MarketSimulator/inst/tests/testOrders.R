@@ -20,7 +20,9 @@ context("Order creation")
 				
 				expect_that(Order("AMP.AX", buy = 10, sell = 10), throws_error())
 				expect_that(quantity(Order("A", buy = 10)), equals(10L))
+				expect_that(quantity(Order("A", buy = -10)), equals(10L))
 				expect_that(quantity(Order("A", sell = 10)), equals(-10L))
+				expect_that(quantity(Order("A", sell = -10)), equals(-10L))
 			})
 	
 	test_that("Order reports on related instrument", {
@@ -113,6 +115,25 @@ context("Order printing")
 				expect_that(output[, "Order.Status"], matchesObject("closed"))
 				expect_that(output[, "Order.Type"], matchesObject("MarketOrder"))
 				expect_that(output[, "Txn.Fees"], matchesObject("0"))
+			})
+	
+	test_that("Orders write transaction record", {
+				
+				timestamp <- as.POSIXct("2010-04-20")
+				price.bar <- xts(10.0, order.by = timestamp)
+				order <- Order("AMP", buy = 100)
+				order@status <- "closed"
+				order@execution.price <- price.bar
+				order@txn.cost.model <- default_cost_model
+				submissionTime(order) <- timestamp
+				
+				output <- writeTransaction(order)
+				
+				expected.output <- data.frame(size = 100, price = 10.0, costs = 0, 
+						row.names = "AMP")
+				
+				expect_that(output, matchesObject(expected.output, 
+								ignore.attributes = FALSE))
 			})
 
 	
@@ -330,12 +351,15 @@ context("Limit order processing")
 				price.bar[, "AMP.AX.Open"] <- 10.0
 				price.bar[, "AMP.AX.Low"] <- 9.90
 				
-				order <- Limit("AMP", buy = 100, at = Op(price.bar) + 0.05)
-				order <- setID(order, 1L)
+				order <- Limit("AMP.AX", buy = 100, at = Op(price.bar) + 0.05)
 				broker <- Broker()
 				addOrder(broker, order)
+				
+				order <- setID(order, 1L)
+				order <- setTxnCostModel(order, default_cost_model)
+				
 				notify(order, broker, price.bar)
-				order <- closedOrders(broker, "AMP")[[1]]
+				order <- closedOrders(broker, "AMP.AX")[[1]]
 				
 				expect_that(status(order), equals("closed"))
 				expect_that(execution_price(order), equals(Op(price.bar)))
@@ -348,12 +372,15 @@ context("Limit order processing")
 				price.bar[, "AMP.AX.Open"] <- 10.0
 				price.bar[, "AMP.AX.High"] <- 10.10
 				
-				order <- Limit("AMP", sell = 100, at = Op(price.bar) + 0.05)
-				order <- setID(order, 1L)
+				order <- Limit("AMP.AX", sell = 100, at = Op(price.bar) + 0.05)
 				broker <- Broker()
 				addOrder(broker, order)
+				
+				order <- setID(order, 1L)
+				order <- setTxnCostModel(order, default_cost_model)
+				
 				notify(order, broker, price.bar)
-				order <- closedOrders(broker, "AMP")[[1]]
+				order <- closedOrders(broker, "AMP.AX")[[1]]
 				
 				expect_that(status(order), equals("closed"))
 				expect_that(execution_price(order), equals(limit_price(order)))
@@ -365,12 +392,15 @@ context("Limit order processing")
 				price.bar[, "AMP.AX.Open"] <- 10.0
 				price.bar[, "AMP.AX.High"] <- 10.10
 				
-				order <- Limit("AMP", sell = 100, at = Op(price.bar) - 0.05)
-				order <- setID(order, 1L)
+				order <- Limit("AMP.AX", sell = 100, at = Op(price.bar) - 0.05)
 				broker <- Broker()
 				addOrder(broker, order)
+				
+				order <- setID(order, 1L)
+				order <- setTxnCostModel(order, default_cost_model)
+				
 				notify(order, broker, price.bar)
-				order <- closedOrders(broker, "AMP")[[1]]
+				order <- closedOrders(broker, "AMP.AX")[[1]]
 				
 				expect_that(status(order), matchesObject("closed"))
 				expect_that(execution_price(order), equals(Op(price.bar)))

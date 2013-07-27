@@ -4,7 +4,6 @@
 setClass("Account",
 		representation(
 			cash = "numeric", 
-			costs = "numeric", 
 			holdings = "data.frame"
 		))
 		
@@ -39,22 +38,28 @@ heldInstruments <- function(account) {
 	return(row.names(holdings(account)))
 }
 
-currentPositions <- function(account) {
-	return(holdings(account)$size)
-}
+setMethod("currentPositions",
+		signature("Account"),
+		function(object) {
+			positions <- holdings(object)$size
+			names(positions) <- heldInstruments(object)
+			return(positions)
+		})
 
-updateAccounts <- function(account, transactions) {
-	
-	holdings <- holdings(account)
-	holdings <- pad_with_empty_rows(holdings, transactions)
-	transactions <- pad_with_empty_rows(transactions, holdings)
-	transactions <- calculate_missing_prices(transactions, holdings)
-	
-	account@holdings <- updateHoldings(holdings, transactions)
-	account@cash <- updateCash(account, transactions)
-	
-	return(account)
-}
+setMethod("updateAccounts",
+		signature("Account"),
+		function(object, transactions) {
+			if (length(transactions)) {
+				holdings <- holdings(object)
+				holdings <- pad_with_empty_rows(holdings, transactions)
+				transactions <- pad_with_empty_rows(transactions, holdings)
+				transactions <- calculate_missing_prices(transactions, holdings)
+				
+				object@holdings <- updateHoldings(holdings, transactions)
+				object@cash <- updateCash(object, transactions)
+			}
+			return(object)
+		})
 
 updateHoldings <- function(holdings, transactions) {
 	holdings$size <- holdings$size + transactions$size

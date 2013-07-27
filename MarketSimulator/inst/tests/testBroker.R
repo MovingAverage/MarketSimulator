@@ -5,6 +5,8 @@
 
 context("__ Broker __")
 
+cleanMockMethods()
+
 context("Reading market data")
 
 	test_that("Broker keeps reference to market data objects", {
@@ -89,7 +91,9 @@ context("Order handling")
 				broker <- Broker()
 				addOrder(broker, order)
 				order@status <- "closed"
+				order@execution.price <- xts(10, order.by = as.Date("2010-04-20"))
 				order <- setID(order, 1L)
+				order <- setTxnCostModel(order, default_cost_model)
 				updateOrder(broker, order)
 				
 				orders <- closedOrders(broker, "AMP")
@@ -98,6 +102,7 @@ context("Order handling")
 				expect_that(status(orders[[1]]), equals("closed"))
 			})
 
+	
 context("Notifications of market activity")
 	
 	test_that("Broker does nothing if no active orders", {
@@ -105,6 +110,7 @@ context("Notifications of market activity")
 				broker <- Broker()
 				market <- Mock("Market")
 				mockMethod(market, "getBar")
+				broker <- addMarket(broker, market)
 				
 				marketActivity(broker, as.Date("2010-03-05"))
 				
@@ -140,6 +146,30 @@ context("Notifications of market activity")
 				
 				expect_that(activeInstruments(broker), matchesObject(c("AMP", "BHP")))
 				expect_that(tradedInstruments(broker), matchesObject("CBA"))
+				expect_that(activeAndTradedInstruments(broker), 
+						matchesObject(c("AMP", "BHP", "CBA")))
+			})
+	
+	test_that("Broker takes note of prices after market activity", {
+				
+				broker <- Broker()
+				stocks <- loadStocks(c("AMP.AX", "BHP.AX", "CBA.AX"))
+				market <- Market(stocks)
+				broker <- addMarket(broker, market)
+				addOrder(broker, Order("AMP.AX", buy = 100))
+				addOrder(broker, Order("BHP.AX", buy = 100))
+				addOrderToBook(broker, Order("CBA.AX", sell = 100), "closed.orders")
+				
+				timestamp <- index(stocks[[1]][2])
+				latest.prices <- c(
+								AMP.AX = as.numeric(Cl(stocks[["AMP.AX"]][timestamp])),
+								BHP.AX = as.numeric(Cl(stocks[["BHP.AX"]][timestamp])),
+								CBA.AX = as.numeric(Cl(stocks[["CBA.AX"]][timestamp])))
+				
+				marketActivity(broker, timestamp)
+				
+				expect_that(latestPrices(broker), 
+						matchesObject(latest.prices, ignore.attributes = FALSE))
 			})
 
 context("Order book storage")
@@ -171,7 +201,10 @@ context("Order book storage")
 				
 				order <- setID(order, 1L)
 				order@status <- "closed"
+				order@execution.price <- xts(10, order.by = as.Date("2010-04-20"))
+				order <- setTxnCostModel(order, default_cost_model)
 				updateOrder(broker, order)
+				
 				
 				expect_that(openOrders(broker, "AMP"), matchesObject(list()))
 				expect_that(closedOrders(broker, "AMP"), matchesObject(list(order)))
@@ -188,6 +221,8 @@ context("Order book storage")
 				mockMethod(list(open.order1, open.order2, closed.order), "submissionTime", 
 						return.value = initDate())
 				mockMethod(list(open.order1, open.order2, closed.order), "notify")
+				mockMethod(list(open.order1, open.order2, closed.order), "quantity", 
+						return.value = 100)
 				
 				broker <- Broker()
 				addOrder(broker, open.order1)
@@ -195,7 +230,9 @@ context("Order book storage")
 				addOrder(broker, closed.order)
 				
 				closed.order <- setID(closed.order, 3L)
+				closed.order <- setTxnCostModel(closed.order, default_cost_model)
 				closed.order@status <- "closed"
+				closed.order@execution.price <- xts(10, order.by = as.Date("2010-04-20"))
 				updateOrder(broker, closed.order)
 				
 				price.bar <- loadStocks("AMP.AX")[[1]][2]
@@ -204,6 +241,124 @@ context("Order book storage")
 				expect_that(open.order1, called_once("notify"))
 				expect_that(open.order2, called_once("notify"))
 				expect_that(closed.order, not_called("notify"))
+			})
+	
+context("Transaction records")
+
+	test_that("Broker stores transaction record for closed order", {
+				
+				cleanMockMethods()
+				amp.transaction <- data.frame(
+						size = 50, price = 0.8, costs = 6, row.names = "AMP")
+				bhp.transaction <- data.frame(
+						size = 100, price = 0.5, costs = 6, row.names = "BHP")
+				transactions <- rbind(amp.transaction, bhp.transaction)
+				
+				amp.order <- Mock("MarketOrder")
+				amp.order@status <- "closed"
+				amp.order@instrument <- "AMP"
+				amp.order <- setID(amp.order, 1L)
+				mockMethod(amp.order, "writeTransaction", amp.transaction)
+				
+				bhp.order <- Mock("MarketOrder")
+				bhp.order@status <- "closed"
+				bhp.order@instrument <- "BHP"
+				bhp.order <- setID(bhp.order, 2L)
+				mockMethod(bhp.order, "writeTransaction", bhp.transaction)
+				
+				broker <- Broker()
+				addOrder(broker, amp.order)
+				addOrder(broker, bhp.order)
+				
+				updateOrder(broker, amp.order)
+				updateOrder(broker, bhp.order)
+				
+				expect_that(transactions(broker), matchesObject(transactions))
+			})
+	
+	test_that("Broker clears transactions", {
+				
+				broker <- Broker()
+				amp.transaction <- data.frame(
+						size = 50, price = 0.8, costs = 6, row.names = "AMP")
+				bhp.transaction <- data.frame(
+						size = 100, price = 0.5, costs = 6, row.names = "BHP")
+				transactions <- rbind(amp.transaction, bhp.transaction)
+				assign("transactions", transactions, broker@transactions)
+				
+				clearTransactions(broker)
+				
+				expect_that(transactions(broker), matchesObject(data.frame()))
+			})
+	
+context("Account management")
+
+	test_that("Broker creates Account", {
+				
+				broker <- Broker()
+				setupAccount(broker, starting.equity = 10000)
+				
+				expect_that(accountAt(broker), is_a("Account"))
+				expect_that(equity(accountAt(broker)), equals(10000))
+			})
+
+	test_that("Broker adds Account", {
+				
+				broker <- Broker()
+				account <- Mock("Account")
+				setAccount(broker, account)
+				
+				expect_that(accountAt(broker), matchesObject(account))
+			})
+	
+	test_that("Broker gets current equity", {
+				
+				broker <- Broker()
+				account <- Mock("Account")
+				mockMethod(account, "equity")
+				setAccount(broker, account)
+				
+				currentEquity(broker)
+				
+				expect_that(account, called_once("equity"))
+			})
+	
+	test_that("Broker gets current positions", {
+				
+				broker <- Broker()
+				account <- Mock("Account")
+				mockMethod(account, "currentPositions")
+				setAccount(broker, account)
+				
+				currentPositions(broker)
+				
+				expect_that(account, called_once("currentPositions"))
+			})
+	
+	test_that("Broker updates Account with transactions", {
+				
+				broker <- Broker()
+				account <- Mock("Account")
+				mockMethod(account, "updateAccounts")
+				setAccount(broker, account)
+				
+				updateAccounts(broker)
+				
+				expect_that(account, 
+						called_once_with("updateAccounts", transactions(broker)))
+			})
+	
+	test_that("Broker clears transactions after updating accounts", {
+				
+				broker <- Broker()
+				account <- Mock("Account")
+				mockMethod(account, "updateAccounts")
+				setAccount(broker, account)
+				setTransactions(broker, data.frame("Has transactions"))
+				
+				updateAccounts(broker)
+				
+				expect_that(transactions(broker), matchesObject(data.frame()))
 			})
 	
 context("Order book output")
@@ -243,8 +398,61 @@ context("Order book output")
 				expect_that(order.book[[1]][[1]], matchesObject(expected.order.book))
 			})
 	
+	test_that("Broker adds transactions to portfolio", {
+				
+				portfolio <- Mock("character")
+				# Method for adding transaction to blotter portfolio
+				mockMethod(portfolio, "addTxn")
+				
+				broker <- Broker()
+				
+				instrument <- "AMP"
+				order <- Order(instrument, buy = 100)
+				order@status <- "closed"
+				order@execution.price <- xts(10.0, order.by = as.Date("2010-02-04"))
+				order@txn.cost.model <- default_cost_model
+				
+				addOrderToBook(broker, order, "closed.orders")
+				
+				portfolioTxns(broker, portfolio, verbose = TRUE)
+				
+				expect_that(portfolio, has_calls(addTxn(portfolio, instrument, 
+										TxnDate = statusTime(order), 
+										TxnQty = quantity(order), 
+										TxnPrice = execution_price(order), 
+										TxnFees = txnFees(order), 
+										verbose = TRUE)))
+			})
 	
 	
+context("Position management")
+
+	test_that("Broker reports on open order sizes", {
+				
+				cleanMockMethods()
+				broker <- Broker()
+				addOrder(broker, Order("AMP", buy = 100))
+				addOrder(broker, Order("BHP", buy = 200))
+				
+				expected.sizes <- c(AMP = 100, BHP = 200)
+				order.sizes <- orderSizes(broker)
+				
+				expect_that(order.sizes, matchesObject(expected.sizes))
+			})
+
+	test_that("Broker considers open orders for positions", {
+				
+				broker <- Broker()
+				account <- Mock("Account")
+				mockMethod(account, "currentPositions", c(AMP = 100))
+				setAccount(broker, account)
+				addOrder(broker, Order("AMP", buy = 100))
+				
+				expected.positions <- c(AMP = 200)
+				positions <- currentPositions(broker)
+				
+				expect_that(positions, matchesObject(expected.positions))
+			})
 	
 	
 	

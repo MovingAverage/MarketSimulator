@@ -64,6 +64,14 @@ statusTime <- function(order) {
 	return(order@status.time)
 }
 
+writeTransaction <- function(order) {
+	data.frame(
+			size = quantity(order), 
+			price = as.numeric(execution_price(order)), 
+			costs = txnFees(order), 
+			row.names = instrumentOf(order))
+}
+
 bookEntry <- function(order) {
 	
 	timestamp <- as.Date("2010-04-20")
@@ -149,7 +157,7 @@ setClass("MarketOrder",
 Order <- function(instrument, buy = NULL, sell = NULL) {
 	
 	check_order_parameters(instrument, buy, sell)
-	quantity <- ifelse(is.null(buy), -as.integer(sell), as.integer(buy))
+	quantity <- ifelse(is.null(buy), -as.integer(abs(sell)), as.integer(abs(buy)))
 	order <- new("MarketOrder", 
 			instrument = instrument, 
 			status = "open",

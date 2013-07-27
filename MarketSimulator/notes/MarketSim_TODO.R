@@ -6,8 +6,8 @@
 # 	DONE - Add order objects to broker
 # 	DONE - Orders are stored for each instrument
 #	DONE - Distinguish between buy and sell orders
-# 	Set order submission date
-# 	Set order status date
+# 	DONE - Set order submission date
+# 	DONE - Set order status date
 # 	DONE - Set order transaction fees
 #	DONE - Cancel open orders for instrument
 # 	Replace existing orders
@@ -21,7 +21,7 @@
 # Phase 3 - Report on activity
 # 	Report on closed orders for given timestamp
 # 	Report on market information for given timestamp
-# 	Update order.book object
+# 	Broker reports on current equity and latest prices.
 
 # Interfacing with blotter and co.
 # 	DONE - Orders print a row of the order book

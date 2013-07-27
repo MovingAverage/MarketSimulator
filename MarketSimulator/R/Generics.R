@@ -12,3 +12,25 @@ setGeneric("getBar",
 initDate <- function() {
 	return(as.POSIXct("1999-12-31"))
 }
+
+
+setGeneric("currentPositions",
+		function(object, ...) {
+			standardGeneric("currentPositions")
+		})
+
+setGeneric("updateAccounts",
+		function(object, transactions, ...) {
+			standardGeneric("updateAccounts")
+		})
+
+setGeneric("tradeableInstruments",
+		function(object, ...) {
+			standardGeneric("tradeableInstruments")
+		})
+
+setGeneric("targetPositions",
+		function(object, timestamp) {
+			standardGeneric("targetPositions")
+		})
+

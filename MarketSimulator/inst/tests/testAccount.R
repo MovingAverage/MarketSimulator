@@ -25,17 +25,18 @@ context("Account queries")
 	test_that("Account reports on held positions", {
 				
 				account <- Account(10000)
-				activeInstruments <- c("AMP", "BHP")
+				active_instruments <- c("AMP", "BHP")
 				positions <- c(100, 50)
 				account@holdings <- data.frame(
 						size = positions, value = c(100, 100), costs = c(6, 6), 
-						row.names = activeInstruments)
+						row.names = active_instruments)
 				expected.positions <- positions
-				names(expected.positions) <- activeInstruments
+				names(expected.positions) <- active_instruments
 				
-				expect_that(heldInstruments(account), matchesObject(activeInstruments))
+				expect_that(heldInstruments(account), matchesObject(active_instruments))
 				expect_that(currentPositions(account), matchesObject(expected.positions))
 			})
+
 	
 context("Updating Account from transactions")
 
@@ -83,18 +84,18 @@ context("Updating Account from transactions")
 				starting.value <- 200
 				starting.cash <- starting.equity - starting.value
 				account <- Account(starting.cash)
-				activeInstruments <- c("AMP", "BHP")
+				active_instruments <- c("AMP", "BHP")
 				account@holdings <- data.frame(
 						size = c(100, 50), value = c(100, 100), costs = c(0, 0), 
-						row.names = activeInstruments)
+						row.names = active_instruments)
 				
 				transactions <- data.frame(
 						size = c(100, -100), price = c(1, 1.1), costs = c(10, 10), 
-						row.names = activeInstruments)
+						row.names = active_instruments)
 				
 				expected.holdings <- data.frame(
 						size = c(200, -50), value = c(200, -55), costs = c(10, 10), 
-						row.names = activeInstruments)
+						row.names = active_instruments)
 				expected.cash <- starting.cash - 100 - 10 + 110 - 10
 				
 				account <- updateAccounts(account, transactions)
@@ -109,18 +110,18 @@ context("Updating Account from transactions")
 				starting.value <- 200
 				starting.cash <- starting.equity - starting.value
 				account <- Account(starting.cash)
-				activeInstruments <- c("AMP", "BHP", "CBA")
+				active_instruments <- c("AMP", "BHP", "CBA")
 				account@holdings <- data.frame(
 						size = c(100, 50), value = c(100, 100), costs = c(10, 0), 
-						row.names = activeInstruments[1:2])
+						row.names = active_instruments[1:2])
 				
 				transactions <- data.frame(
 						size = c(100, 100), price = c(1, 1.5), costs = c(10, 10), 
-						row.names = activeInstruments[c(1, 3)])
+						row.names = active_instruments[c(1, 3)])
 				
 				expected.holdings <- data.frame(
 						size = c(200, 50, 100), value = c(200, 100, 150), 
-						costs = c(20, 0, 10), row.names = activeInstruments)
+						costs = c(20, 0, 10), row.names = active_instruments)
 				expected.cash <- starting.cash - 100 - 10 - 150 - 10
 				expected.equity <- starting.equity - 20
 				

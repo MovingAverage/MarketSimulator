@@ -40,6 +40,7 @@ context("Order execution")
 				timstamp <- index(AMP.bar)
 				
 				market <- Mock("Market")
+				mockMethod(market, "tradeableInstruments", "AMP.AX")
 				mockMethod(market, "getBar", return.value = AMP.bar)
 				
 				broker <- Broker()
@@ -65,6 +66,7 @@ context("Order execution")
 				timstamp <- index(AMP.bar)
 				
 				market <- Mock("Market")
+				mockMethod(market, "tradeableInstruments", "AMP.AX")
 				mockMethod(market, "getBar", return.value = AMP.bar)
 				
 				broker <- Broker()
@@ -80,8 +82,6 @@ context("Order execution")
 				expect_that(status(closed.orders[[1]]), matchesObject("closed"))
 				expect_that(status(open.orders[[1]]), matchesObject("open"))
 			})
-	
-
 	
 	
 	
