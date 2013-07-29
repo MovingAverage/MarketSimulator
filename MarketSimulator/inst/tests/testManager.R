@@ -28,6 +28,17 @@ context("Position calculations")
 				expect_that(target.changes, matchesObject(expected.changes))
 			})
 	
+	test_that("No changes if already have correct positions", {
+				
+				current.positions <- c(AMP = 0.5, CBA = 0)
+				ideal.positions <- c(AMP = 0.5, CBA = 0.6)
+				expected.changes <- c(CBA = 0.6)
+				
+				target.changes <- balancePositions(current.positions, ideal.positions)
+				
+				expect_that(target.changes, matchesObject(expected.changes))
+			})
+	
 	test_that("Positions are ignored if too costly", {
 				
 				current.positions <- c(AMP = 0.25, BHP = 0, CBA = 0)
@@ -44,6 +55,28 @@ context("Position calculations")
 				current.positions <- numeric(0)
 				ideal.positions <- c(AMP = 0.35, BHP = 0, CBA = 0.6)
 				expected.changes <- c(AMP = 0.35, CBA = 0.6)
+				
+				target.changes <- balancePositions(current.positions, ideal.positions)
+				
+				expect_that(target.changes, matchesObject(expected.changes))
+			})
+	
+	test_that("Positions not changed if missing current fraction", {
+				
+				current.positions <- c(AMP = 0.5, BHP = NA)
+				ideal.positions <- c(AMP = 0.5, BHP = 0.5)
+				expected.changes <- numeric(0)
+				
+				target.changes <- balancePositions(current.positions, ideal.positions)
+				
+				expect_that(target.changes, matchesObject(expected.changes))
+			})
+	
+	test_that("Positions not changed if missing target", {
+				
+				current.positions <- c(AMP = 0.5, BHP = 0)
+				ideal.positions <- c(AMP = 0.5, BHP = NA)
+				expected.changes <- numeric(0)
 				
 				target.changes <- balancePositions(current.positions, ideal.positions)
 				

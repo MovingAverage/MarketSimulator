@@ -31,6 +31,10 @@ addTxnCostModel <- function(broker, model) {
 
 addMarket <- function(broker, market) {
 			broker@market <- market
+			instruments <- tradeableInstruments(market)
+			prices <- numeric(length(instruments))
+			names(prices) <- instruments
+			setLatestPrices(broker, prices)
 			return(broker)
 		}
 
@@ -74,6 +78,16 @@ addTransactionRecord <- function(broker, order) {
 
 setTransactions <- function(broker, transactions) {
 	assign("transactions", transactions, broker@transactions)
+}
+
+#' Return transaction records
+transactions <- function(broker) {
+	get("transactions", broker@transactions)
+}
+
+#' Clear transaction records
+clearTransactions <- function(broker) {
+	assign("transactions", data.frame(), broker@transactions)	
 }
 
 updateOpenOrdersBook <- function(broker, order) {
@@ -145,7 +159,6 @@ notifyOrders <- function(broker, instrument, price.bar) {
 	}
 }
 
-# TODO set up latest prices when adding market and clean up below function
 recordLatestPrice <- function(broker, price) {
 	if (length(price) == 0) {
 		return()
@@ -155,28 +168,19 @@ recordLatestPrice <- function(broker, price) {
 		instrument <- paste(splits[-length(splits)], collapse = ".")
 		price <- as.numeric(price)
 		names(price) <- instrument
-	}
-	if (length(latestPrices(broker))) {
+		
 		latest.prices <- latestPrices(broker)
-		if (names(price) %in% names(latest.prices)) {
-			latest.prices[names(price)] <- price
-		} else {
-			latest.prices <- c(latest.prices, price)
-		}
+		latest.prices[names(price)] <- price
 		setLatestPrices(broker, latest.prices)
-	} else {
-		setLatestPrices(broker, price)
 	}
 }
 
-#' Return transaction records
-transactions <- function(broker) {
-	get("transactions", broker@transactions)
+latestPrices <- function(broker) {
+	get("latest.prices", broker@transactions)
 }
 
-#' Clear transaction records
-clearTransactions <- function(broker) {
-	assign("transactions", data.frame(), broker@transactions)	
+setLatestPrices <- function(broker, prices) {
+	assign("latest.prices", prices, broker@transactions)
 }
 
 setupAccount <- function(broker, starting.equity) {
@@ -207,31 +211,27 @@ currentEquity <- function(broker) {
 setMethod("currentPositions",
 		signature("Broker"),
 		function(object) {
-			positions <- currentPositions(accountAt(object))
+			tradeable.instruments <- tradeableInstruments(object)
+			positions <- numeric(length(tradeable.instruments))
+			names(positions) <- tradeable.instruments
+			account.positions <- currentPositions(accountAt(object))
+			positions[names(account.positions)] <- account.positions
 			order.sizes <- orderSizes(object)
 			return(positions + order.sizes)
 		})
 
 orderSizes <- function(broker) {
 	
-	active.instruments <- activeInstruments(broker)
-	order.sizes <- numeric(length(active.instruments))
-	names(order.sizes) <- active.instruments
-	for (instrument in active.instruments) {
+	tradeable.instruments <- tradeableInstruments(broker)
+	order.sizes <- numeric(length(tradeable.instruments))
+	names(order.sizes) <- tradeable.instruments
+	for (instrument in tradeable.instruments) {
 		orders <- openOrders(broker, instrument)
 		if (length(orders)) {
 			order.sizes[instrument] <- sum(sapply(orders, quantity))
 		}
 	}
 	return(order.sizes)
-}
-
-latestPrices <- function(broker) {
-	get("latest.prices", broker@transactions)
-}
-
-setLatestPrices <- function(broker, prices) {
-	assign("latest.prices", prices, broker@transactions)
 }
 
 #' Print closed orders as quantstrat order_book object

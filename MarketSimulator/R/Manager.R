@@ -22,12 +22,13 @@ balancePositions <- function(current.positions, ideal.positions) {
 	percentage.commission <- 0.0008
 	minimum.commission <- 6
 	cost.threshold <- 0.002
-	capital <- 10000
+	capital <- 20000
 	
 	current.positions <- pad_with_zeros(current.positions, ideal.positions)
 	ideal.positions <- pad_with_zeros(ideal.positions, current.positions)
 	
 	target.changes <- ideal.positions - current.positions
+	target.changes[is.na(target.changes)] <- 0
 	size.of.changes <- abs(target.changes) * capital
 	cost <- pmax(minimum.commission, size.of.changes * percentage.commission)
 	relative.cost <- cost / size.of.changes
@@ -43,7 +44,6 @@ pad_with_zeros <- function(current, target) {
 	missing.names <- !target.names %in% current.names
 	current <- c(current, target[missing.names])
 	current[missing.names] <- 0
-	current[is.na(current)] <- 0
 	current <- current[sort(names(current))]
 	return(current)
 }
@@ -52,7 +52,6 @@ BackTest <- function(manager, broker, start.date, end.date) {
 	
 	setupAccount(broker, starting.equity = 10000)
 	for (timestamp in as.character(seq.Date(start.date, end.date, by = 1))) {
-		records <- paste0(timestamp, ": ")
 		marketActivity(broker, timestamp)
 		updateAccounts(broker)
 		records <- placeOrders(manager, broker, timestamp)
@@ -65,14 +64,16 @@ BackTest <- function(manager, broker, start.date, end.date) {
 placeOrders <- function(manager, broker, timestamp) {
 	
 	current.positions <- currentPositions(broker)
+	target.fraction <- targetPositions(manager, timestamp)
 	current.equity <- currentEquity(broker)
 	latest.prices <- latestPrices(broker)
 	current.fraction <- current.positions * latest.prices / current.equity
-	target.fraction <- targetPositions(manager, timestamp)
+	
 	if (length(target.fraction) == 0) {
-		return("no target")
+		return(NULL)
 	}
 	changes <- balancePositions(current.fraction, target.fraction)
+	records <- NULL
 	for (instrument in names(changes)) {
 		position.size <- current.equity * 
 				changes[instrument] / latest.prices[instrument]
@@ -81,28 +82,34 @@ placeOrders <- function(manager, broker, timestamp) {
 		}
 		if (position.size > 0) {
 			position <- as.integer(position.size)
-			records <- paste0("buy ", position)
+			notice <- paste("buy", position, instrument)
+			records <- appendNotice(records, notice)
 			order <- Order(instrument, buy = position)
 		} else {
 			if (target.fraction[instrument] == 0) {
 				sell.size <- current.positions[instrument]
-				records <- paste0("sell all ", sell.size)
+				notice <- paste0("sell all (", sell.size, ") ", instrument)
+				records <- appendNotice(records, notice)
 				order <- Order(instrument, sell = as.integer(sell.size))
 			} else {
-				records <- paste0("sell ", position.size)
-				order <- Order(instrument, sell = as.integer(position.size))
+				position <- as.integer(position.size)
+				notice <- paste("sell", position, instrument)
+				records <- appendNotice(records, notice)
+				order <- Order(instrument, sell = position)
 			}
-			
 		}
 		addOrder(broker, order)
-		if (is.null(records)) {
-			return(NULL)
-		} else {
-			return(records)
-		}
+	}
+	if (is.null(records)) {
+		return(NULL)
+	} else {
+		return(records)
 	}
 }
 
+appendNotice <- function(records, notice) {
+	return(paste0(records, ifelse(length(records), ", ", ""), notice))
+}
 
 setupBackTest <- function(instruments, name) {
 	
@@ -120,13 +127,13 @@ setupBackTest <- function(instruments, name) {
 	broker <- addMarket(broker, market)
 	
 	strategy <- new("Strategy")
-	strategy@instrument <- instrument
+	strategy@instruments <- instruments
 	strategy@indicator <- EMA
 	strategy <- strategySetup(strategy, market)
 	manager <- Manager(strategy)
 
-	start.date <- first(index(strategy@positions))
-	end.date <- last(index(strategy@positions))
+	start.date <- as.Date(first(index(strategy@positions)))
+	end.date <- as.Date(last(index(strategy@positions)))
 	
 	assign("market", market, globalenv())
 	assign("broker", broker, globalenv())
@@ -146,6 +153,7 @@ restartBacktest <- function(name) {
 			initEq = 10000, currency = "AUD")
 	broker <- Broker()
 	broker <- addMarket(broker, market)
+	assign("broker", broker, globalenv())
 }
 
 

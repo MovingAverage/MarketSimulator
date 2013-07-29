@@ -87,7 +87,9 @@ pad_with_empty_rows <- function(frame, target) {
 
 calculate_missing_prices <- function(transactions, holdings) {
 	rows <- transactions$size == 0
-	transactions[rows, "price"] <- holdings[rows, "value"] / holdings[rows, "size"]
+	missing.prices <- holdings[rows, "value"] / holdings[rows, "size"]
+	missing.prices[!is.finite(missing.prices)] <- 0
+	transactions[rows, "price"] <- missing.prices
 	return(transactions)
 }
 

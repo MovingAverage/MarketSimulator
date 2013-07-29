@@ -431,6 +431,9 @@ context("Position management")
 				
 				cleanMockMethods()
 				broker <- Broker()
+				market <- Mock("Market")
+				mockMethod(market, "tradeableInstruments", c("AMP", "BHP"))
+				broker <- addMarket(broker, market)
 				addOrder(broker, Order("AMP", buy = 100))
 				addOrder(broker, Order("BHP", buy = 200))
 				
@@ -442,16 +445,37 @@ context("Position management")
 
 	test_that("Broker considers open orders for positions", {
 				
-				broker <- Broker()
+				market <- Mock("Market")
+				mockMethod(market, "tradeableInstruments", c("AMP", "BHP"))
 				account <- Mock("Account")
 				mockMethod(account, "currentPositions", c(AMP = 100))
+				
+				broker <- Broker()
+				broker <- addMarket(broker, market)
 				setAccount(broker, account)
 				addOrder(broker, Order("AMP", buy = 100))
 				
-				expected.positions <- c(AMP = 200)
+				expected.positions <- c(AMP = 200, BHP = 0)
 				positions <- currentPositions(broker)
 				
 				expect_that(positions, matchesObject(expected.positions))
+			})
+	
+	test_that("Broker always reports on positions for all instruments", {
+				
+				market <- Mock("Market")
+				mockMethod(market, "tradeableInstruments", c("AMP", "BHP"))
+				account <- Mock("Account")
+				mockMethod(account, "currentPositions", numeric())
+				
+				broker <- Broker()
+				broker <- addMarket(broker, market)
+				setAccount(broker, account)
+				
+				expected.positions <- c(AMP = 0, BHP = 0)
+				
+				expect_that(currentPositions(broker), 
+						matchesObject(expected.positions, ignore.attributes = FALSE))
 			})
 	
 	
