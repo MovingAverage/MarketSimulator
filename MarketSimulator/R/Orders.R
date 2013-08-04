@@ -1,16 +1,110 @@
 #' 
+#' State object controlling the order status
+setClass("OrderStatus")
+
+setGeneric("callUpdateProcedure",
+		function(status, order, broker) {
+			standardGeneric("callUpdateProcedure")
+		})
+
+setGeneric("status",
+		function(object) {
+			standardGeneric("status")
+		})
+
+setClass("OpenStatus",
+		contains = "OrderStatus")
+
+OpenStatus <- function() {
+	new("OpenStatus")
+}
+
+setMethod("status",
+		signature(object = "OpenStatus"),
+		function(object) {
+			return("open")
+		})
+
+setMethod("callUpdateProcedure",
+		signature(status ="OpenStatus"),
+		function(status, order, broker) {
+			replaceOrder(broker, order)
+		})
+
+setClass("ClosedStatus",
+		contains = "OrderStatus")
+
+ClosedStatus <- function() {
+	new("ClosedStatus")
+}
+
+setMethod("status",
+		signature(object = "ClosedStatus"),
+		function(object) {
+			return("closed")
+		})
+
+setMethod("callUpdateProcedure",
+		signature(status ="ClosedStatus"),
+		function(status, order, broker) {
+			closeOrder(broker, order)
+		})
+
+setClass("NullStatus",
+		contains = "OrderStatus")
+
+NullStatus <- function() {
+	new("NullStatus")
+}
+
+setMethod("status",
+		signature(object = "NullStatus"),
+		function(object) {
+			return("cancelled")
+		})
+
+setMethod("callUpdateProcedure",
+		signature(status = "NullStatus"),
+		function(status, order, broker) {
+			cancelOrder(broker, order)
+		})
+
+#' 
 #' 
 setClass("Order", 
 		representation(
 			instrument = "character",
 			ID = "integer", 
-			status = "character",
+			status = "OrderStatus",
 			quantity = "integer",
 			execution.price = "xts", 
 			txn.cost.model = "function", 
 			submission.time = "POSIXct", 
 			status.time = "POSIXct"
 		))
+
+as.data.frame.Order <- function(x) {
+	price <- execution_price(x)
+	if (length(price) == 0) {
+		price <- NA
+	}
+	submitted <- submissionTime(x)
+	if (submitted == initDate()) {
+		submitted <- NA
+	}
+	updated <- statusTime(x)
+	if (updated == initDate()) {
+		updated <- NA
+	}
+	data.frame(
+			ID = getID(x), 
+			instrument = instrumentOf(x), 
+			status = status(x), 
+			quantity = quantity(x), 
+			price = price, 
+			submitted = submitted, 
+			updated = updated)
+}
 
 instrumentOf <- function(order) {
 	return(order@instrument)
@@ -25,9 +119,11 @@ getID <- function(order) {
 	return(order@ID)
 }
 
-status <- function(order) {
-	return(order@status)
-}
+setMethod("status",
+		signature(object = "Order"),
+		function(object) {
+			status(object@status)
+		})
 
 quantity <- function(order) {
 	return(order@quantity)
@@ -64,6 +160,32 @@ statusTime <- function(order) {
 	return(order@status.time)
 }
 
+setGeneric("mergeOrders",
+		function(existing.order, new.order) {
+			if (instrumentOf(existing.order) != instrumentOf(new.order)) {
+				stop("Instruments differ between orders")
+			}
+			if (class(existing.order) != class(new.order)) {
+				stop("Attempt to merge different order types")
+			}
+			quantity <- quantity(existing.order) + quantity(new.order)
+			if (quantity > 0) {
+				order <- Order(instrumentOf(existing.order), buy = quantity)
+			} else {
+				order <- Order(instrumentOf(existing.order), sell = quantity)
+				if (quantity == 0) {
+					order@status <- NullStatus()
+				}
+			}
+			order <- setTxnCostModel(order, existing.order@txn.cost.model)
+			order <- setID(order, getID(existing.order))
+			return(order)
+		})
+
+updateOrder <- function(order, broker) {
+	callUpdateProcedure(order@status, order, broker)
+}
+
 writeTransaction <- function(order) {
 	data.frame(
 			size = quantity(order), 
@@ -92,6 +214,12 @@ bookEntry <- function(order) {
 	return(ordertemplate)
 }
 
+setMethod("show",
+		signature(object = "Order"),
+		function(object) {
+			show(as.data.frame(object))
+		})
+
 #' notify order of market activity
 #' 
 #' \code{notify} will generally be called by the broker when a new price bar is available.
@@ -106,9 +234,6 @@ bookEntry <- function(order) {
 #' 
 setGeneric("notify",
 		function(order, broker, price.bar, ...) {
-			if (submissionTime(order) == initDate()) {
-				submissionTime(order) <- index(price.bar)
-			}
 			if (are_related(order, price.bar) && active_market(price.bar)) {
 				standardGeneric("notify")
 			}
@@ -130,9 +255,9 @@ not_NA_or_Zero <- function(value) {
 
 execute <- function(order, at, broker) {
 	order@execution.price <- at
-	order@status <- "closed"
+	order@status <- ClosedStatus()
 	statusTime(order) <- index(at)
-	updateOrder(broker, order)
+	updateOrder(order, broker)
 }
 
 
@@ -160,7 +285,7 @@ Order <- function(instrument, buy = NULL, sell = NULL) {
 	quantity <- ifelse(is.null(buy), -as.integer(abs(sell)), as.integer(abs(buy)))
 	order <- new("MarketOrder", 
 			instrument = instrument, 
-			status = "open",
+			status = OpenStatus(),
 			quantity = quantity,
 			execution.price = xts(), 
 			submission.time = initDate(), 
@@ -211,7 +336,7 @@ Limit <- function(instrument, buy = NULL, sell = NULL, at) {
 	if (is.null(buy)) {
 		order <- new("SellLimitOrder", 
 				instrument = instrument, 
-				status = "open",
+				status = OpenStatus(),
 				quantity = -abs(as.integer(sell)),
 				execution.price = xts(), 
 				limit.price = at, 
@@ -220,7 +345,7 @@ Limit <- function(instrument, buy = NULL, sell = NULL, at) {
 	} else {
 		order <- new("BuyLimitOrder", 
 				instrument = instrument, 
-				status = "open",
+				status = OpenStatus(),
 				quantity = abs(as.integer(buy)),
 				execution.price = xts(), 
 				limit.price = at, 
@@ -279,7 +404,7 @@ Stop <- function(instrument, buy = NULL, sell = NULL, at) {
 	if (is.null(buy)) {
 		order <- new("SellStopLoss", 
 				instrument = instrument, 
-				status = "open",
+				status = OpenStatus(),
 				quantity = -abs(as.integer(sell)),
 				execution.price = xts(), 
 				limit.price = at, 
@@ -288,7 +413,7 @@ Stop <- function(instrument, buy = NULL, sell = NULL, at) {
 	} else {
 		order <- new("BuyStopLoss", 
 				instrument = instrument, 
-				status = "open",
+				status = OpenStatus(),
 				quantity = abs(as.integer(buy)),
 				execution.price = xts(), 
 				limit.price = at, 

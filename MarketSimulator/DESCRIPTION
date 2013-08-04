@@ -19,7 +19,7 @@ Suggests:
     testthat
 Collate:
     'Generics.R'
-    'MarketOrders.R'
+    'Orders.R'
     'Market.R'
     'Broker.R'
     'Manager.R'

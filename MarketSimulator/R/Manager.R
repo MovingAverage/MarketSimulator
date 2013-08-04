@@ -22,7 +22,7 @@ balancePositions <- function(current.positions, ideal.positions) {
 	percentage.commission <- 0.0008
 	minimum.commission <- 6
 	cost.threshold <- 0.002
-	capital <- 20000
+	capital <- 8000
 	
 	current.positions <- pad_with_zeros(current.positions, ideal.positions)
 	ideal.positions <- pad_with_zeros(ideal.positions, current.positions)
@@ -33,7 +33,8 @@ balancePositions <- function(current.positions, ideal.positions) {
 	cost <- pmax(minimum.commission, size.of.changes * percentage.commission)
 	relative.cost <- cost / size.of.changes
 	effective <- relative.cost < cost.threshold
-	return(target.changes[effective])
+	target.changes[!effective] <- 0
+	return(target.changes)
 }
 
 pad_with_zeros <- function(current, target) {
@@ -48,53 +49,38 @@ pad_with_zeros <- function(current, target) {
 	return(current)
 }
 
-BackTest <- function(manager, broker, start.date, end.date) {
-	
-	setupAccount(broker, starting.equity = 10000)
-	for (timestamp in as.character(seq.Date(start.date, end.date, by = 1))) {
-		marketActivity(broker, timestamp)
-		updateAccounts(broker)
-		records <- placeOrders(manager, broker, timestamp)
-		if (!is.null(records)) {
-			message(paste0(timestamp, ": ", records))
-		}
-	}
+positionSizes <- function(broker, target.fraction) {
+	current.fraction <- currentPositionFractions(broker)
+	changes <- balancePositions(current.fraction, target.fraction)
+	position.changes <- currentEquity(broker) * changes / latestPrices(broker)
+	sell.all <- target.fraction == 0 & changes < 0
+	position.changes[sell.all] <- -1 * currentPositions(broker)[sell.all]
+	return(position.changes[position.changes != 0])
 }
 
 placeOrders <- function(manager, broker, timestamp) {
 	
-	current.positions <- currentPositions(broker)
 	target.fraction <- targetPositions(manager, timestamp)
-	current.equity <- currentEquity(broker)
-	latest.prices <- latestPrices(broker)
-	current.fraction <- current.positions * latest.prices / current.equity
-	
-	if (length(target.fraction) == 0) {
+	if (all(is.na(target.fraction))) {
 		return(NULL)
 	}
-	changes <- balancePositions(current.fraction, target.fraction)
+	position.size <- positionSizes(broker, target.fraction)
 	records <- NULL
-	for (instrument in names(changes)) {
-		position.size <- current.equity * 
-				changes[instrument] / latest.prices[instrument]
-		if (!is.finite(position.size)) {
-			return("non-finite position")
+	for (instrument in names(position.size)) {
+		position <- as.integer(position.size[instrument])
+		if (!is.finite(position)) {
+			records <- nonFiniteNotice(records, instrument)
+			next
 		}
-		if (position.size > 0) {
-			position <- as.integer(position.size)
-			notice <- paste("buy", position, instrument)
-			records <- appendNotice(records, notice)
+		if (position > 0) {
+			records <- buyNotice(records, position, instrument)
 			order <- Order(instrument, buy = position)
 		} else {
-			if (target.fraction[instrument] == 0) {
-				sell.size <- current.positions[instrument]
-				notice <- paste0("sell all (", sell.size, ") ", instrument)
-				records <- appendNotice(records, notice)
-				order <- Order(instrument, sell = as.integer(sell.size))
+			if (isTRUE(as.numeric(target.fraction[instrument]) == 0)) {
+				records <- sellAllNotice(records, position, instrument)
+				order <- Order(instrument, sell = position)
 			} else {
-				position <- as.integer(position.size)
-				notice <- paste("sell", position, instrument)
-				records <- appendNotice(records, notice)
+				records <- sellNotice(records, position, instrument)
 				order <- Order(instrument, sell = position)
 			}
 		}
@@ -107,8 +93,37 @@ placeOrders <- function(manager, broker, timestamp) {
 	}
 }
 
+nonFiniteNotice <- function(records, instrument) {
+	appendNotice(records, paste(instrument, "non-finite position"))
+}
+
+buyNotice <- function(records, position, instrument) {
+	appendNotice(records, paste("buy", position, instrument))
+}
+
+sellAllNotice <- function(records, sell.size, instrument) {
+	appendNotice(records, paste0("sell all (", sell.size, ") ", instrument))
+}
+
+sellNotice <- function(records, position, instrument) {
+	appendNotice(records, paste("sell", position, instrument))
+}
+
 appendNotice <- function(records, notice) {
 	return(paste0(records, ifelse(length(records), ", ", ""), notice))
+}
+
+BackTest <- function(manager, broker, start.date, end.date) {
+	
+	setupAccount(broker, starting.equity = 10000)
+	for (timestamp in as.character(seq.Date(start.date, end.date, by = 1))) {
+		marketActivity(broker, timestamp)
+		updateAccounts(broker)
+		records <- placeOrders(manager, broker, timestamp)
+		if (!is.null(records)) {
+			message(paste0(timestamp, ": ", records))
+		}
+	}
 }
 
 setupBackTest <- function(instruments, name) {

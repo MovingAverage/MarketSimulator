@@ -15,13 +15,13 @@ context("Interfacing with Strategy")
 				expect_that(strategy, called_once("targetPositions"))
 			})
 	
-context("Position calculations")
+context("Balancing current with target fractions")
 
 	test_that("Positions are taken if none currently", {
 				
 				current.positions <- c(AMP = 0, BHP = 0, CBA = 0)
 				ideal.positions <- c(AMP = 0.35, BHP = 0, CBA = 0.6)
-				expected.changes <- c(AMP = 0.35, CBA = 0.6)
+				expected.changes <- c(AMP = 0.35, BHP = 0, CBA = 0.6)
 				
 				target.changes <- balancePositions(current.positions, ideal.positions)
 				
@@ -32,7 +32,7 @@ context("Position calculations")
 				
 				current.positions <- c(AMP = 0.5, CBA = 0)
 				ideal.positions <- c(AMP = 0.5, CBA = 0.6)
-				expected.changes <- c(CBA = 0.6)
+				expected.changes <- c(AMP = 0, CBA = 0.6)
 				
 				target.changes <- balancePositions(current.positions, ideal.positions)
 				
@@ -43,7 +43,7 @@ context("Position calculations")
 				
 				current.positions <- c(AMP = 0.25, BHP = 0, CBA = 0)
 				ideal.positions <- c(AMP = 0.3, BHP = 0, CBA = 0.6)
-				expected.changes <- c(CBA = 0.6)
+				expected.changes <- c(AMP = 0, BHP = 0, CBA = 0.6)
 				
 				target.changes <- balancePositions(current.positions, ideal.positions)
 				
@@ -54,7 +54,7 @@ context("Position calculations")
 				
 				current.positions <- numeric(0)
 				ideal.positions <- c(AMP = 0.35, BHP = 0, CBA = 0.6)
-				expected.changes <- c(AMP = 0.35, CBA = 0.6)
+				expected.changes <- c(AMP = 0.35, BHP = 0, CBA = 0.6)
 				
 				target.changes <- balancePositions(current.positions, ideal.positions)
 				
@@ -65,7 +65,7 @@ context("Position calculations")
 				
 				current.positions <- c(AMP = 0.5, BHP = NA)
 				ideal.positions <- c(AMP = 0.5, BHP = 0.5)
-				expected.changes <- numeric(0)
+				expected.changes <- c(AMP = 0, BHP = 0)
 				
 				target.changes <- balancePositions(current.positions, ideal.positions)
 				
@@ -76,17 +76,50 @@ context("Position calculations")
 				
 				current.positions <- c(AMP = 0.5, BHP = 0)
 				ideal.positions <- c(AMP = 0.5, BHP = NA)
-				expected.changes <- numeric(0)
+				expected.changes <- c(AMP = 0, BHP = 0)
 				
 				target.changes <- balancePositions(current.positions, ideal.positions)
 				
 				expect_that(target.changes, matchesObject(expected.changes))
 			})
+
+context("Position size calculations")
+
+	test_that("Zero position size changes are not returned", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "currentPositionFractions", c(AMP = 0, BHP = 0.5))
+				mockMethod(broker, "currentEquity", 10000)
+				mockMethod(broker, "currentPositions", c(AMP = 0, BHP = 100))
+				mockMethod(broker, "latestPrices", c(AMP = 50, BHP = 50))
+				
+				target.fraction <- c(AMP = 0.5, BHP = 0.5)
+				
+				sizes <- positionSizes(broker, target.fraction)
+				
+				expect_that(sizes, matchesObject(c(AMP = 100)))
+			})
 	
-context("Creating Orders")
+	test_that("Sell all target uses current position size", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "currentPositionFractions", c(AMP = 0.5, BHP = 0.5))
+				mockMethod(broker, "currentEquity", 10000)
+				mockMethod(broker, "currentPositions", c(AMP = 100, BHP = 100))
+				mockMethod(broker, "latestPrices", c(AMP = 30, BHP = 50))
+				
+				target.fraction <- c(AMP = 0, BHP = 0.5)
+				
+				sizes <- positionSizes(broker, target.fraction)
+				
+				expect_that(sizes, matchesObject(c(AMP = -100)))
+			})
+	
+context("Placing Orders")
 
 	test_that("Manager creates buy order", {
 				
+				cleanMockMethods()
 				broker <- Mock("Broker")
 				equity <- 10000
 				AMP.price <- c(AMP = 50)
@@ -178,6 +211,27 @@ context("Creating Orders")
 				placeOrders(manager, broker, timestamp = "")
 				
 				expect_that(broker, not_called("addOrder"))
+			})
+	
+	test_that("Sell order placed at current position if sell all", {
+				
+				broker <- Mock("Broker")
+				AMP.price <- c(AMP = 45)
+				mockMethod(broker, "currentEquity", 10000)
+				mockMethod(broker, "latestPrices", AMP.price)
+				mockMethod(broker, "currentPositions", c(AMP = 100))
+				mockMethod(broker, "addOrder")
+				
+				target.positions <- c(AMP = 0)
+				strategy <- Mock()
+				mockMethod(strategy, "targetPositions", target.positions)
+				expected.order <- Order("AMP", sell = 100)
+				
+				manager <- Manager(strategy)
+				records <- placeOrders(manager, broker, timestamp = "")
+				
+				expect_that(broker, called_once_with("addOrder", expected.order))
+				expect_that(records, matchesObject("sell all (-100) AMP"))
 			})
 	
 	

@@ -17,7 +17,8 @@ Broker <- function() {
 			cost.model = default_cost_model, 
 			transactions = as.environment(list(
 							transactions = data.frame(),
-							latest.prices = c())))
+							latest.prices = c(), 
+							todays.date = initDate())))
 }
 
 default_cost_model <- function(order) {
@@ -41,15 +42,31 @@ addMarket <- function(broker, market) {
 setMethod("getBar",
 		signature("Broker"),
 		function(object, instrument, timestamp) {
+			setTodaysDate(object, timestamp)
 			getBar(object@market, instrument, timestamp)
 		})
+
+today <- function(broker) {
+	get("todays.date", broker@transactions)
+}
+
+setTodaysDate <- function(broker, timestamp) {
+	assign("todays.date", timestamp, broker@transactions)
+}
 
 addOrder <- function(broker, order) {
 	if (!inherits(order, "Order")) {
 		stop("Only orders derived from class 'Order' may be added to Broker")
 	}
 	order <- setTxnCostModel(order, broker@cost.model)
-	addOrderToBook(broker, order, order.book = "open.orders")
+	submissionTime(order) <- today(broker)
+	if (hasSimilarOrder(broker, order)) {
+		existing.order <- getSimilarOrder(broker, order)
+		order <- mergeOrders(existing.order, order)
+		updateOrder(order, broker)
+	} else {
+		addOrderToBook(broker, order, order.book = "open.orders")
+	}
 }
 
 addOrderToBook <- function(broker, order, order.book) {
@@ -59,14 +76,26 @@ addOrderToBook <- function(broker, order, order.book) {
 	assign(instrumentOf(order), order.list, slot(broker, order.book))
 }
 
-updateOrder <- function(broker, order) {
-	if (status(order) == "closed") {
-		removeFromOpenOrders(broker, order)
-		addOrderToBook(broker, order, order.book = "closed.orders")
-		addTransactionRecord(broker, order)
-	} else {
-		updateOpenOrdersBook(broker, order)
-	}
+closeOrder <- function(broker, order) {
+	removeFromOpenOrders(broker, order)
+	addOrderToBook(broker, order, order.book = "closed.orders")
+	addTransactionRecord(broker, order)
+}
+
+cancelOrder <- function(broker, order) {
+	removeFromOpenOrders(broker, order)
+}
+
+replaceOrder <- function(broker, order) {
+	order.list <- openOrders(broker, instrumentOf(order))
+	order.list[[getID(order)]] <- order
+	assign(instrumentOf(order), order.list, broker@open.orders)
+}
+
+removeFromOpenOrders <- function(broker, order) {
+	order.list <- openOrders(broker, instrumentOf(order))
+	order.list[[getID(order)]] <- NULL
+	assign(instrumentOf(order), order.list, broker@open.orders)
 }
 
 addTransactionRecord <- function(broker, order) {
@@ -90,16 +119,25 @@ clearTransactions <- function(broker) {
 	assign("transactions", data.frame(), broker@transactions)	
 }
 
-updateOpenOrdersBook <- function(broker, order) {
-	order.list <- openOrders(broker, instrumentOf(order))
-	order.list[[getID(order)]] <- order
-	assign(instrumentOf(order), order.list, broker@open.orders)
+hasSimilarOrder <- function(broker, order) {
+	similar.order <- getSimilarOrder(broker, order)
+	return(is(similar.order, "Order"))
 }
 
-removeFromOpenOrders <- function(broker, order) {
-	order.list <- openOrders(broker, instrumentOf(order))
-	order.list[[getID(order)]] <- NULL
-	assign(instrumentOf(order), order.list, broker@open.orders)
+getSimilarOrder <- function(broker, order) {
+	open.orders <- openOrders(broker, instrumentOf(order))
+	return_if_same_class <- function(test.order, benchmark.order) {
+		if (class(test.order) == class(benchmark.order)) {
+			return(test.order)
+		}
+	}
+	similar.orders <- lapply(open.orders, return_if_same_class, benchmark.order = order)
+	if (length(similar.orders) > 1) stop("More than one similar order found")
+	if (length(similar.orders) == 1) {
+		return(similar.orders[[1]])
+	} else {
+		return(NULL)
+	}
 }
 
 openOrders <- function(broker, instrument) {
@@ -204,6 +242,10 @@ setMethod("updateAccounts",
 			clearTransactions(object)
 		})
 
+currentPositionFractions <- function(broker) {
+	return(currentPositions(broker) * latestPrices(broker) / currentEquity(broker))
+}
+
 currentEquity <- function(broker) {
 	equity(accountAt(broker))
 }
@@ -287,7 +329,7 @@ portfolioTxns <- function(broker, portfolio, verbose = TRUE) {
 					TxnDate = statusTime(order), 
 					TxnQty = quantity(order), 
 					TxnPrice = execution_price(order), 
-					TxnFees = txnFees(order), 
+					TxnFees = -txnFees(order), 
 					verbose = verbose)
 			
 		}
@@ -296,7 +338,30 @@ portfolioTxns <- function(broker, portfolio, verbose = TRUE) {
 	
 }
 
-
+setMethod("show",
+		signature(object = "Broker"),
+		function(object) {
+			print("Market:")
+			print(object@market)
+			print("Open Orders:")
+			open.orders <- data.frame()
+			closed.orders <- numeric()
+			for (instrument in activeInstruments(object)) {
+				for (order in openOrders(object, instrument)) {
+					open.orders <- rbind(open.orders, as.data.frame(order))
+				}
+			}
+			for (instrument in tradedInstruments(broker)) {
+				num.closed <- length(closedOrders(broker, instrument))
+				names(num.closed) <- instrument
+				closed.orders <- c(closed.orders, num.closed)
+			}
+			print(open.orders)
+			print("Number of closed orders:")
+			print(closed.orders)
+			print("Last Transactions:")
+			print(transactions(broker))
+		})
 
 
 

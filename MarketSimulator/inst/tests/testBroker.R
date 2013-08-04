@@ -33,6 +33,23 @@ context("Reading market data")
 				expect_that(market, called_once_with("getBar", ticker, timestamp))
 				expect_that(bar, equals(AMP.AX[timestamp]))
 			})
+	
+	test_that("Broker records current day for future reference", {
+				
+				market <- Mock("Market")
+				ticker <- "AMP.AX"
+				AMP.AX <- loadStocks(ticker)[[1]]
+				timestamp <- "2010-01-04"
+				mockMethod(market, "getBar", AMP.AX[timestamp])
+				
+				broker <- Broker()
+				broker <- addMarket(broker, market)
+				
+				bar <- getBar(broker, ticker, timestamp)
+				
+				expect_that(today(broker), 
+						matchesObject(timestamp, ignore.attributes = FALSE))
+			})
 
 
 context("Order handling")
@@ -47,13 +64,26 @@ context("Order handling")
 				
 				broker <- Broker()
 				order1 <- Order("AMP", buy = 100)
-				order2 <- Order("AMP", buy = 100)
+				order2 <- Limit("AMP", buy = 100, at = xts())
 				addOrder(broker, order1)
 				addOrder(broker, order2)
 				orders <- openOrders(broker, "AMP")
 				
 				expect_that(getID(orders[[1]]), equals(1))
 				expect_that(getID(orders[[2]]), equals(2))
+			})
+	
+	test_that("Broker assigns submission date when order added", {
+				
+				broker <- Broker()
+				todays.date <- as.POSIXct("2010-04-20")
+				setTodaysDate(broker, todays.date)
+				
+				addOrder(broker, Order("AMP", buy = 100))
+				order <- openOrders(broker, "AMP")[[1]]
+				
+				expect_that(submissionTime(order), 
+						matchesObject(todays.date, ignore.attributes = FALSE))
 			})
 	
 	test_that("Broker assigns transaction cost function to order", {
@@ -71,7 +101,7 @@ context("Order handling")
 	test_that("Broker stores open orders", {
 				
 				order1 <- Order("AMP", buy = 100)
-				order2 <- Order("AMP", buy = 100)
+				order2 <- Stop("AMP", buy = 100, at = xts())
 				broker <- Broker()
 				addOrder(broker, order1)
 				addOrder(broker, order2)
@@ -90,16 +120,30 @@ context("Order handling")
 				order <- Order("AMP", buy = 100)
 				broker <- Broker()
 				addOrder(broker, order)
-				order@status <- "closed"
+				order@status <- ClosedStatus()
 				order@execution.price <- xts(10, order.by = as.Date("2010-04-20"))
 				order <- setID(order, 1L)
 				order <- setTxnCostModel(order, default_cost_model)
-				updateOrder(broker, order)
+				updateOrder(order, broker)
 				
 				orders <- closedOrders(broker, "AMP")
 				
 				expect_that(length(orders), equals(1))
 				expect_that(status(orders[[1]]), equals("closed"))
+			})
+	
+	test_that("Broker checks if similar existing Market order", {
+				
+				broker <- Broker()
+				addOrder(broker, Order("AMP", buy = 100))
+				
+				expect_that(hasSimilarOrder(broker, Order("AMP", buy = 50)), is_true())
+				expect_that(hasSimilarOrder(broker, Order("AMP", sell = 50)), is_true())
+				expect_that(hasSimilarOrder(broker, Order("BHP", buy = 50)), is_false())
+				expect_that(hasSimilarOrder(broker, Limit("AMP", buy = 50, at = xts())), 
+						is_false())
+				expect_that(hasSimilarOrder(broker, Stop("AMP", buy = 50, at = xts())), 
+						is_false())
 			})
 
 	
@@ -122,12 +166,13 @@ context("Notifications of market activity")
 				broker <- Broker()
 				
 				order1 <- Mock("MarketOrder")
-				order2 <- Mock("MarketOrder")
+				order2 <- Mock("LimitOrder")
 				mockMethod(list(order1, order2), "notify", order1)
 				mockMethod(list(order1, order2), "instrumentOf", "AMP")
 				mockMethod(list(order1, order2), "submissionTime", initDate())
-				addOrder(broker, order1)
-				addOrder(broker, order2)
+				
+				addOrderToBook(broker, order1, order.book = "open.orders")
+				addOrderToBook(broker, order2, order.book = "open.orders")
 				
 				price.bar <- loadStocks("AMP.AX")[[1]][2]
 				notifyOrders(broker, "AMP", price.bar)
@@ -200,10 +245,10 @@ context("Order book storage")
 				addOrder(broker, order)
 				
 				order <- setID(order, 1L)
-				order@status <- "closed"
+				order@status <- ClosedStatus()
 				order@execution.price <- xts(10, order.by = as.Date("2010-04-20"))
 				order <- setTxnCostModel(order, default_cost_model)
-				updateOrder(broker, order)
+				updateOrder(order, broker)
 				
 				
 				expect_that(openOrders(broker, "AMP"), matchesObject(list()))
@@ -212,34 +257,25 @@ context("Order book storage")
 
 	test_that("Closed orders not notified of market activity", {
 				
-				open.order1 <- Mock("Order")
-				open.order2 <- Mock("Order")
-				closed.order <- Mock("Order")
+				open.order <- Mock("MarketOrder")
+				closed.order <- Mock("MarketOrder")
 				
-				mockMethod(list(open.order1, open.order2, closed.order), "instrumentOf", 
+				mockMethod(list(open.order, closed.order), "instrumentOf", 
 						return.value = "AMP.AX")
-				mockMethod(list(open.order1, open.order2, closed.order), "submissionTime", 
+				mockMethod(list(open.order, closed.order), "submissionTime", 
 						return.value = initDate())
-				mockMethod(list(open.order1, open.order2, closed.order), "notify")
-				mockMethod(list(open.order1, open.order2, closed.order), "quantity", 
+				mockMethod(list(open.order, closed.order), "notify")
+				mockMethod(list(open.order, closed.order), "quantity", 
 						return.value = 100)
 				
 				broker <- Broker()
-				addOrder(broker, open.order1)
-				addOrder(broker, open.order2)
-				addOrder(broker, closed.order)
-				
-				closed.order <- setID(closed.order, 3L)
-				closed.order <- setTxnCostModel(closed.order, default_cost_model)
-				closed.order@status <- "closed"
-				closed.order@execution.price <- xts(10, order.by = as.Date("2010-04-20"))
-				updateOrder(broker, closed.order)
+				addOrder(broker, open.order)
+				addOrderToBook(broker, closed.order, order.book = "closed.orders")
 				
 				price.bar <- loadStocks("AMP.AX")[[1]][2]
 				notifyOrders(broker, "AMP.AX", price.bar)
 				
-				expect_that(open.order1, called_once("notify"))
-				expect_that(open.order2, called_once("notify"))
+				expect_that(open.order, called_once("notify"))
 				expect_that(closed.order, not_called("notify"))
 			})
 	
@@ -255,13 +291,13 @@ context("Transaction records")
 				transactions <- rbind(amp.transaction, bhp.transaction)
 				
 				amp.order <- Mock("MarketOrder")
-				amp.order@status <- "closed"
+				amp.order@status <- ClosedStatus()
 				amp.order@instrument <- "AMP"
 				amp.order <- setID(amp.order, 1L)
 				mockMethod(amp.order, "writeTransaction", amp.transaction)
 				
 				bhp.order <- Mock("MarketOrder")
-				bhp.order@status <- "closed"
+				bhp.order@status <- ClosedStatus()
 				bhp.order@instrument <- "BHP"
 				bhp.order <- setID(bhp.order, 2L)
 				mockMethod(bhp.order, "writeTransaction", bhp.transaction)
@@ -270,8 +306,8 @@ context("Transaction records")
 				addOrder(broker, amp.order)
 				addOrder(broker, bhp.order)
 				
-				updateOrder(broker, amp.order)
-				updateOrder(broker, bhp.order)
+				updateOrder(amp.order, broker)
+				updateOrder(bhp.order, broker)
 				
 				expect_that(transactions(broker), matchesObject(transactions))
 			})
@@ -368,7 +404,7 @@ context("Order book output")
 				broker <- Broker()
 				
 				order <- Order("AMP", buy = 100)
-				order@status <- "closed"
+				order@status <- ClosedStatus()
 				order@execution.price <- xts(10.0, order.by = as.Date("2010-02-04"))
 				order@txn.cost.model <- default_cost_model
 				
@@ -408,7 +444,7 @@ context("Order book output")
 				
 				instrument <- "AMP"
 				order <- Order(instrument, buy = 100)
-				order@status <- "closed"
+				order@status <- ClosedStatus()
 				order@execution.price <- xts(10.0, order.by = as.Date("2010-02-04"))
 				order@txn.cost.model <- default_cost_model
 				
@@ -476,6 +512,28 @@ context("Position management")
 				
 				expect_that(currentPositions(broker), 
 						matchesObject(expected.positions, ignore.attributes = FALSE))
+			})
+	
+	test_that("Broker combines orders into one when appropriate", {
+				
+				broker <- Broker()
+				
+				addOrder(broker, Order("AMP", buy = 100))
+				addOrder(broker, Order("AMP", buy = 100))
+				
+				addOrder(broker, Order("BHP", buy = 100))
+				addOrder(broker, Order("BHP", sell = 100))
+				
+				expected.order <- Order("AMP", buy = 200)
+				expected.order <- setID(expected.order, 1L)
+				
+				amp.orders <- openOrders(broker, "AMP")
+				bhp.orders <- openOrders(broker, "BHP")
+				
+				
+				expect_that(length(amp.orders), equals(1))
+				expect_that(amp.orders[[1]], matchesObject(expected.order))
+				expect_that(length(bhp.orders), matchesObject(0))
 			})
 	
 	
