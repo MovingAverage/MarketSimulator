@@ -1,75 +1,5 @@
 #' 
-#' State object controlling the order status
-setClass("OrderStatus")
-
-setGeneric("callUpdateProcedure",
-		function(status, order, broker) {
-			standardGeneric("callUpdateProcedure")
-		})
-
-setGeneric("status",
-		function(object) {
-			standardGeneric("status")
-		})
-
-setClass("OpenStatus",
-		contains = "OrderStatus")
-
-OpenStatus <- function() {
-	new("OpenStatus")
-}
-
-setMethod("status",
-		signature(object = "OpenStatus"),
-		function(object) {
-			return("open")
-		})
-
-setMethod("callUpdateProcedure",
-		signature(status ="OpenStatus"),
-		function(status, order, broker) {
-			replaceOrder(broker, order)
-		})
-
-setClass("ClosedStatus",
-		contains = "OrderStatus")
-
-ClosedStatus <- function() {
-	new("ClosedStatus")
-}
-
-setMethod("status",
-		signature(object = "ClosedStatus"),
-		function(object) {
-			return("closed")
-		})
-
-setMethod("callUpdateProcedure",
-		signature(status ="ClosedStatus"),
-		function(status, order, broker) {
-			closeOrder(broker, order)
-		})
-
-setClass("NullStatus",
-		contains = "OrderStatus")
-
-NullStatus <- function() {
-	new("NullStatus")
-}
-
-setMethod("status",
-		signature(object = "NullStatus"),
-		function(object) {
-			return("cancelled")
-		})
-
-setMethod("callUpdateProcedure",
-		signature(status = "NullStatus"),
-		function(status, order, broker) {
-			cancelOrder(broker, order)
-		})
-
-#' 
+#' Parent object from which different Order types may be derived.
 #' 
 setClass("Order", 
 		representation(
@@ -82,33 +12,6 @@ setClass("Order",
 			submission.time = "POSIXct", 
 			status.time = "POSIXct"
 		))
-
-as.data.frame.Order <- function(x) {
-	price <- execution_price(x)
-	if (length(price) == 0) {
-		price <- NA
-	}
-	submitted <- submissionTime(x)
-	if (submitted == initDate()) {
-		submitted <- NA
-	}
-	updated <- statusTime(x)
-	if (updated == initDate()) {
-		updated <- NA
-	}
-	data.frame(
-			ID = getID(x), 
-			instrument = instrumentOf(x), 
-			status = status(x), 
-			quantity = quantity(x), 
-			price = price, 
-			submitted = submitted, 
-			updated = updated)
-}
-
-instrumentOf <- function(order) {
-	return(order@instrument)
-}
 
 setID <- function(order, ID) {
 	order@ID <- ID
@@ -127,6 +30,11 @@ setMethod("status",
 
 quantity <- function(order) {
 	return(order@quantity)
+}
+
+"quantity<-" <- function(order, value) {
+	order@quantity <- as.integer(value)
+	return(order)
 }
 
 execution_price <- function(order) {
@@ -192,6 +100,25 @@ writeTransaction <- function(order) {
 			price = as.numeric(execution_price(order)), 
 			costs = txnFees(order), 
 			row.names = instrumentOf(order))
+}
+
+as.data.frame.Order <- function(x) {
+	
+	value_or_default <- function(value, default) {
+		if (length(value) == 0) {
+			value <- default
+		}
+		return(value)
+	}
+	
+	data.frame(
+			ID = value_or_default(getID(x), NA), 
+			instrument = value_or_default(instrumentOf(x), NA), 
+			status = value_or_default(status(x), NA), 
+			quantity = value_or_default(quantity(x), 0), 
+			price = value_or_default(execution_price(x), NA), 
+			submitted = value_or_default(submissionTime(x), initDate()), 
+			updated = value_or_default(statusTime(x), initDate()))
 }
 
 bookEntry <- function(order) {

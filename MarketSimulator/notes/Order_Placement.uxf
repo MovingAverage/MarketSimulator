@@ -2,125 +2,9 @@
 <diagram program="umlet" version="12.0">
   <zoom_level>8</zoom_level>
   <element>
-    <type>com.umlet.element.Class</type>
-    <coordinates>
-      <x>544</x>
-      <y>0</y>
-      <w>112</w>
-      <h>80</h>
-    </coordinates>
-    <panel_attributes>Order
---
-+notify(price.bar)</panel_attributes>
-    <additional_attributes/>
-  </element>
-  <element>
-    <type>com.umlet.element.Relation</type>
-    <coordinates>
-      <x>144</x>
-      <y>16</y>
-      <w>112</w>
-      <h>40</h>
-    </coordinates>
-    <panel_attributes>lt=&lt;&lt;&lt;-</panel_attributes>
-    <additional_attributes>96;24;24;24</additional_attributes>
-  </element>
-  <element>
-    <type>com.umlet.element.Relation</type>
-    <coordinates>
-      <x>608</x>
-      <y>40</y>
-      <w>106</w>
-      <h>80</h>
-    </coordinates>
-    <panel_attributes>lt=-&gt;
-execute&gt;</panel_attributes>
-    <additional_attributes>24;40;24;64;40;64;88;64;88;24;48;24</additional_attributes>
-  </element>
-  <element>
-    <type>com.umlet.element.Class</type>
-    <coordinates>
-      <x>240</x>
-      <y>192</y>
-      <w>200</w>
-      <h>72</h>
-    </coordinates>
-    <panel_attributes>Manager
---
-+placeOrders(broker, timestamp)</panel_attributes>
-    <additional_attributes/>
-  </element>
-  <element>
-    <type>com.umlet.element.Class</type>
-    <coordinates>
-      <x>0</x>
-      <y>0</y>
-      <w>168</w>
-      <h>80</h>
-    </coordinates>
-    <panel_attributes>Account
---
-+updateAccounts(transactions)</panel_attributes>
-    <additional_attributes/>
-  </element>
-  <element>
-    <type>com.umlet.element.Relation</type>
-    <coordinates>
-      <x>416</x>
-      <y>24</y>
-      <w>144</w>
-      <h>56</h>
-    </coordinates>
-    <panel_attributes>lt=&lt;-&gt;&gt;&gt;
-notify&gt;</panel_attributes>
-    <additional_attributes>128;40;24;40</additional_attributes>
-  </element>
-  <element>
-    <type>com.umlet.element.Relation</type>
-    <coordinates>
-      <x>240</x>
-      <y>96</y>
-      <w>132</w>
-      <h>112</h>
-    </coordinates>
-    <panel_attributes>lt=&lt;-
-addOrder(order)&gt;</panel_attributes>
-    <additional_attributes>104;24;104;72;32;72;32;96</additional_attributes>
-  </element>
-  <element>
-    <type>com.umlet.element.Relation</type>
-    <coordinates>
-      <x>416</x>
-      <y>0</y>
-      <w>144</w>
-      <h>56</h>
-    </coordinates>
-    <panel_attributes>lt=&lt;-
-&lt;updateOrder</panel_attributes>
-    <additional_attributes>24;40;128;40</additional_attributes>
-  </element>
-  <element>
-    <type>com.umlet.element.Class</type>
-    <coordinates>
-      <x>240</x>
-      <y>0</y>
-      <w>200</w>
-      <h>120</h>
-    </coordinates>
-    <panel_attributes>Broker
---
-+addOrder(order)
-+marketActivity(timestamp)
-+notifyOrders(instrument, price.bar)
-+updateAccounts()
-
-+updateOrder(order)</panel_attributes>
-    <additional_attributes/>
-  </element>
-  <element>
     <type>com.umlet.element.SequenceDiagram</type>
     <coordinates>
-      <x>24</x>
+      <x>32</x>
       <y>304</y>
       <w>704</w>
       <h>688</h>
@@ -153,6 +37,122 @@ A-&gt;&gt;A:B,A:updateHoldings(transactions)
 A-&gt;&gt;A:B,A:updateCash(transactions)
 B-&gt;&gt;B:B:clearTransactions()
 iframe}</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>8</x>
+      <y>0</y>
+      <w>168</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>Account
+--
++updateAccounts(transactions)</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>616</x>
+      <y>40</y>
+      <w>106</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>lt=-&gt;
+execute&gt;</panel_attributes>
+    <additional_attributes>24;40;24;64;40;64;88;64;88;24;48;24</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>424</x>
+      <y>24</y>
+      <w>144</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;-&gt;&gt;&gt;
+notify&gt;</panel_attributes>
+    <additional_attributes>128;40;24;40</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>152</x>
+      <y>16</y>
+      <w>112</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;&lt;-</panel_attributes>
+    <additional_attributes>96;24;24;24</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>248</x>
+      <y>192</y>
+      <w>200</w>
+      <h>72</h>
+    </coordinates>
+    <panel_attributes>Manager
+--
++placeOrders(broker, timestamp)</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>424</x>
+      <y>0</y>
+      <w>144</w>
+      <h>56</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;-
+&lt;updateOrder</panel_attributes>
+    <additional_attributes>24;40;128;40</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>248</x>
+      <y>96</y>
+      <w>132</w>
+      <h>112</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;-
+addOrder(order)&gt;</panel_attributes>
+    <additional_attributes>104;24;104;72;32;72;32;96</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>248</x>
+      <y>0</y>
+      <w>200</w>
+      <h>120</h>
+    </coordinates>
+    <panel_attributes>Broker
+--
++addOrder(order)
++marketActivity(timestamp)
++notifyOrders(instrument, price.bar)
++updateAccounts()
+
++updateOrder(order)</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>552</x>
+      <y>0</y>
+      <w>112</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>Order
+--
++notify(price.bar)</panel_attributes>
     <additional_attributes/>
   </element>
 </diagram>

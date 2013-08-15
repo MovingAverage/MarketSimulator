@@ -36,6 +36,13 @@ context("Order creation")
 				expect_that(instrumentOf(stop.order), matchesObject(ticker))
 				expect_that(instrumentOf(limit.order), matchesObject(ticker))
 			})
+	
+	test_that("Setting quantity of order converts to integer", {
+				
+				order <- new("Order")
+				quantity(order) <- 100
+				expect_that(quantity(order), equals(100L))
+			})
 
 context("Order time stamping")
 	

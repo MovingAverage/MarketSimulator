@@ -2,12 +2,19 @@
 #'
 setClass("Manager",
 		representation(
-			strategy = "ANY"
+			strategy = "ANY", 
+			cost.model = "function", 
+			cost.threshold = "numeric", 
+			positions = "Positions"
 		))
 		
 Manager <- function(strategy) {
 	manager <- new("Manager")
 	manager@strategy <- strategy
+	manager@cost.model <- function(value) {
+		max(6, abs(value) * 0.0008)
+	}
+	manager@cost.threshold <- 0.002
 	return(manager)
 }
 
@@ -17,171 +24,96 @@ setMethod("targetPositions",
 			targetPositions(object@strategy, timestamp)
 		})
 
-balancePositions <- function(current.positions, ideal.positions) {
-	
-	percentage.commission <- 0.0008
-	minimum.commission <- 6
-	cost.threshold <- 0.002
-	capital <- 8000
-	
-	current.positions <- pad_with_zeros(current.positions, ideal.positions)
-	ideal.positions <- pad_with_zeros(ideal.positions, current.positions)
-	
-	target.changes <- ideal.positions - current.positions
-	target.changes[is.na(target.changes)] <- 0
-	size.of.changes <- abs(target.changes) * capital
-	cost <- pmax(minimum.commission, size.of.changes * percentage.commission)
-	relative.cost <- cost / size.of.changes
-	effective <- relative.cost < cost.threshold
-	target.changes[!effective] <- 0
-	return(target.changes)
+isViable <- function(manager, positions, target) {
+	positions <- addTarget(positions, target)
+	value <- transactionValue(positions, instrumentOf(target))
+	cost <- tradeCost(manager, value)
+	(cost / abs(value)) < manager@cost.threshold
 }
 
-pad_with_zeros <- function(current, target) {
-	
-	current.names <- names(current)
-	target.names <- names(target)
-	
-	missing.names <- !target.names %in% current.names
-	current <- c(current, target[missing.names])
-	current[missing.names] <- 0
-	current <- current[sort(names(current))]
-	return(current)
-}
-
-positionSizes <- function(broker, target.fraction) {
-	current.fraction <- currentPositionFractions(broker)
-	changes <- balancePositions(current.fraction, target.fraction)
-	position.changes <- currentEquity(broker) * changes / latestPrices(broker)
-	sell.all <- target.fraction == 0 & changes < 0
-	position.changes[sell.all] <- -1 * currentPositions(broker)[sell.all]
-	return(position.changes[position.changes != 0])
+tradeCost <- function(manager, value) {
+	return(manager@cost.model(value))
 }
 
 placeOrders <- function(manager, broker, timestamp) {
 	
-	target.fraction <- targetPositions(manager, timestamp)
-	if (all(is.na(target.fraction))) {
-		return(NULL)
-	}
-	position.size <- positionSizes(broker, target.fraction)
-	records <- NULL
-	for (instrument in names(position.size)) {
-		position <- as.integer(position.size[instrument])
-		if (!is.finite(position)) {
-			records <- nonFiniteNotice(records, instrument)
-			next
-		}
-		if (position > 0) {
-			records <- buyNotice(records, position, instrument)
-			order <- Order(instrument, buy = position)
-		} else {
-			if (isTRUE(as.numeric(target.fraction[instrument]) == 0)) {
-				records <- sellAllNotice(records, position, instrument)
-				order <- Order(instrument, sell = position)
-			} else {
-				records <- sellNotice(records, position, instrument)
-				order <- Order(instrument, sell = position)
-			}
-		}
-		addOrder(broker, order)
-	}
-	if (is.null(records)) {
-		return(NULL)
-	} else {
-		return(records)
-	}
-}
-
-nonFiniteNotice <- function(records, instrument) {
-	appendNotice(records, paste(instrument, "non-finite position"))
-}
-
-buyNotice <- function(records, position, instrument) {
-	appendNotice(records, paste("buy", position, instrument))
-}
-
-sellAllNotice <- function(records, sell.size, instrument) {
-	appendNotice(records, paste0("sell all (", sell.size, ") ", instrument))
-}
-
-sellNotice <- function(records, position, instrument) {
-	appendNotice(records, paste("sell", position, instrument))
-}
-
-appendNotice <- function(records, notice) {
-	return(paste0(records, ifelse(length(records), ", ", ""), notice))
-}
-
-BackTest <- function(manager, broker, start.date, end.date) {
+	targets <- targetPositions(manager, timestamp)
+	positions <- manager@positions
 	
-	setupAccount(broker, starting.equity = 10000)
-	for (timestamp in as.character(seq.Date(start.date, end.date, by = 1))) {
-		marketActivity(broker, timestamp)
-		updateAccounts(broker)
-		records <- placeOrders(manager, broker, timestamp)
-		if (!is.null(records)) {
-			message(paste0(timestamp, ": ", records))
+	for (target in targets) {
+		if (isViable(manager, positions, target)) {
+			positions <- addTarget(positions, target)
+			positions <- fireOrder(positions, broker, instrumentOf(target))
 		}
 	}
+	manager@positions <- positions
+	return(manager)
 }
 
-setupBackTest <- function(instruments, name) {
-	
-	require("blotter")
-	currency("AUD")
-	for (instrument in instruments) {
-		stock(instrument, currency = "AUD")
+updatePositions <- function(manager, broker) {
+	transactions <- transactions(broker)
+	clearTransactions(broker)
+	manager <- updateAccount(manager, transactions)
+	positions <- manager@positions
+	latestPrices(positions) <- latestPrices(broker)
+	for (instrument in activeInstruments(positions)) {
+		position <- getPosition(positions, instrument)
+		position <- updateSize(position, transactions)
+		position <- updateOrders(position, broker)
+		positions <- setPosition(positions, position)
 	}
-	initPortf(name, instruments, initDate = initDate(), currency = "AUD", )
-	initAcct(name, portfolios = name, initDate = initDate(), 
-			initEq = 10000, currency = "AUD")
-	
-	market <- Market(loadStocks(instruments))
-	broker <- Broker()
-	broker <- addMarket(broker, market)
-	
-	strategy <- new("Strategy")
-	strategy@instruments <- instruments
-	strategy@indicator <- EMA
-	strategy <- strategySetup(strategy, market)
-	manager <- Manager(strategy)
-
-	start.date <- as.Date(first(index(strategy@positions)))
-	end.date <- as.Date(last(index(strategy@positions)))
-	
-	assign("market", market, globalenv())
-	assign("broker", broker, globalenv())
-	assign("manager", manager, globalenv())
-	assign("start.date", start.date, globalenv())
-	assign("end.date", end.date, globalenv())
+	manager@positions <- positions
+	return(manager)
 }
 
-
-restartBacktest <- function(name) {
-	
-	instruments <- names(getPortfolio(name)$symbols)
-	try(rm(list = paste(c("account", "portfolio"), name, sep = "."), pos = .blotter), 
-			silent = TRUE)
-	initPortf(name, instruments, initDate = initDate(), currency = "AUD", )
-	initAcct(name, portfolios = name, initDate = initDate(), 
-			initEq = 10000, currency = "AUD")
-	broker <- Broker()
-	broker <- addMarket(broker, market)
-	assign("broker", broker, globalenv())
-}
-
-
-updateBlotter <- function(name) {
-	
-	for (symbol in tradeableInstruments(market)) {
-		assign(symbol, market@instruments[[symbol]], globalenv())
+sendNotices <- function(manager, timestamp) {
+	notices <- notices(manager@positions)
+	if (nchar(notices) > 0) {
+		message(paste0(timestamp, ": ", notices))
 	}
-	
-	portfolioTxns(broker, name)
-	updatePortf(name)
-	updateAcct(name)
+	manager <- clearNotices(manager)
+	return(manager)
 }
+
+setMethod("clearNotices",
+		signature("Manager"),
+		function(object) {
+			object@positions <- clearNotices(object@positions)
+			return(object)
+		})
+
+setupAccount <- function(manager, starting.equity) {
+	manager@positions <- PositionSet(Account(starting.equity), numeric())
+	return(manager)
+}
+
+setMethod("updateAccount",
+		signature("Manager"),
+		function(object, transactions) {
+			object@positions <- updateAccount(object@positions, transactions)
+			return(object)
+		})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -10,33 +10,11 @@ context("Account creation")
 	test_that("Account starts with appropriate values", {
 				
 				starting.equity <- 10000
-				starting.holdings <- data.frame(
-						size = numeric(), value = numeric(), costs = numeric())
 				account <- Account(starting.equity)
 				
 				expect_that(cashIn(account), matchesObject(starting.equity))
-				expect_that(totalCosts(account), matchesObject(0))
-				expect_that(equity(account), matchesObject(starting.equity))
-				expect_that(holdings(account), matchesObject(starting.holdings))
 			})
 	
-context("Account queries")
-
-	test_that("Account reports on held positions", {
-				
-				account <- Account(10000)
-				active_instruments <- c("AMP", "BHP")
-				positions <- c(100, 50)
-				account@holdings <- data.frame(
-						size = positions, value = c(100, 100), costs = c(6, 6), 
-						row.names = active_instruments)
-				expected.positions <- positions
-				names(expected.positions) <- active_instruments
-				
-				expect_that(heldInstruments(account), matchesObject(active_instruments))
-				expect_that(currentPositions(account), matchesObject(expected.positions))
-			})
-
 	
 context("Updating Account from transactions")
 
@@ -46,21 +24,14 @@ context("Updating Account from transactions")
 				starting.value <- 100
 				starting.cash <- starting.equity - starting.value
 				account <- Account(starting.cash)
-				account@holdings <- data.frame(size = 100, value = 100, costs = 6, 
-						row.names = "AMP")
 				
 				transaction <- data.frame(size = -50, price = 0.8, costs = 6, 
 						row.names = "AMP")
-				account <- updateAccounts(account, transaction)
+				account <- updateAccount(account, transaction)
 				
-				expected.holdings <- data.frame(size = 50, value = 40, costs = 12, 
-						row.names = "AMP")
-				expected.equity <- starting.equity + (80 - 100) - 6
 				expected.cash <- starting.cash + 40 - 6
 				
-				expect_that(holdings(account), matchesObject(expected.holdings))
 				expect_that(cashIn(account), matchesObject(expected.cash))
-				expect_that(equity(account), matchesObject(expected.equity))
 			})
 	
 	test_that("Addition of new holding", {
@@ -69,13 +40,9 @@ context("Updating Account from transactions")
 				
 				transaction <- data.frame(size = 100, price = 1, costs = 6, 
 						row.names = "AMP")
-				expected.holdings <- data.frame(size = 100, value = 100, costs = 6, 
-						row.names = "AMP")
-				account <- updateAccounts(account, transaction)
+				account <- updateAccount(account, transaction)
 				
-				expect_that(holdings(account), matchesObject(expected.holdings))
 				expect_that(cashIn(account), matchesObject(10000 - 106))
-				expect_that(equity(account), matchesObject(10000 - 6))
 			})
 	
 	test_that("Account updated with multiple transactions", {
@@ -85,22 +52,15 @@ context("Updating Account from transactions")
 				starting.cash <- starting.equity - starting.value
 				account <- Account(starting.cash)
 				active_instruments <- c("AMP", "BHP")
-				account@holdings <- data.frame(
-						size = c(100, 50), value = c(100, 100), costs = c(0, 0), 
-						row.names = active_instruments)
 				
 				transactions <- data.frame(
 						size = c(100, -100), price = c(1, 1.1), costs = c(10, 10), 
 						row.names = active_instruments)
 				
-				expected.holdings <- data.frame(
-						size = c(200, -50), value = c(200, -55), costs = c(10, 10), 
-						row.names = active_instruments)
 				expected.cash <- starting.cash - 100 - 10 + 110 - 10
 				
-				account <- updateAccounts(account, transactions)
+				account <- updateAccount(account, transactions)
 				
-				expect_that(holdings(account), matchesObject(expected.holdings))
 				expect_that(cashIn(account), matchesObject(expected.cash))
 			})
 	
@@ -111,25 +71,16 @@ context("Updating Account from transactions")
 				starting.cash <- starting.equity - starting.value
 				account <- Account(starting.cash)
 				active_instruments <- c("AMP", "BHP", "CBA")
-				account@holdings <- data.frame(
-						size = c(100, 50), value = c(100, 100), costs = c(10, 0), 
-						row.names = active_instruments[1:2])
 				
 				transactions <- data.frame(
 						size = c(100, 100), price = c(1, 1.5), costs = c(10, 10), 
 						row.names = active_instruments[c(1, 3)])
 				
-				expected.holdings <- data.frame(
-						size = c(200, 50, 100), value = c(200, 100, 150), 
-						costs = c(20, 0, 10), row.names = active_instruments)
 				expected.cash <- starting.cash - 100 - 10 - 150 - 10
-				expected.equity <- starting.equity - 20
 				
-				account <- updateAccounts(account, transactions)
+				account <- updateAccount(account, transactions)
 				
 				expect_that(cashIn(account), matchesObject(expected.cash))
-				expect_that(equity(account), matchesObject(expected.equity))
-				expect_that(holdings(account), matchesObject(expected.holdings))
 			})
 	
 	test_that("Account updated with transaction of different instrument", {
@@ -138,25 +89,17 @@ context("Updating Account from transactions")
 				starting.cash <- starting.equity
 				account <- Account(starting.cash)
 				active_instruments <- c("AMP", "BHP")
-				account@holdings <- data.frame(
-						size = 0, value = 0, costs = 0, 
-						row.names = active_instruments[2])
 				
 				transactions <- data.frame(
 						size = 100, price = 1.5, costs = 10, 
 						row.names = active_instruments[1])
 				
-				expected.holdings <- data.frame(
-						size = c(100, 0), value = c(150, 0), 
-						costs = c(10, 0), row.names = active_instruments)
 				expected.cash <- starting.cash - 150 - 10
 				expected.equity <- starting.equity - 10
 				
-				account <- updateAccounts(account, transactions)
+				account <- updateAccount(account, transactions)
 				
 				expect_that(cashIn(account), matchesObject(expected.cash))
-				expect_that(equity(account), matchesObject(expected.equity))
-				expect_that(holdings(account), matchesObject(expected.holdings))
 			})
 	
 	

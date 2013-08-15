@@ -19,9 +19,14 @@ Suggests:
     testthat
 Collate:
     'Generics.R'
+    'OrderStatus.R'
     'Orders.R'
     'Market.R'
     'Broker.R'
-    'Manager.R'
     'Account.R'
+    'TargetPosition.R'
+    'Position.R'
+    'Manager.R'
     'Strategy.R'
+    'BackTest.R'
+

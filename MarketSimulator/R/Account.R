@@ -3,18 +3,13 @@
 
 setClass("Account",
 		representation(
-			cash = "numeric", 
-			holdings = "data.frame"
+			cash = "numeric"
 		))
 		
 Account <- function(starting.equity) {
 	
 	account <- new("Account")
 	account@cash <- starting.equity
-	account@holdings <- data.frame(
-			size = numeric(), 
-			value = numeric(), 
-			costs = numeric())
 	return(account)
 }
 
@@ -22,51 +17,19 @@ cashIn <- function(account) {
 	return(account@cash)
 }
 
-holdings <- function(account) {
-	return(account@holdings)
-}
-
-totalCosts <- function(account) {
-	return(sum(holdings(account)$costs))
-}
-
-equity <- function(account) {
-	return(cashIn(account) + sum(holdings(account)$value))
-}
-
-heldInstruments <- function(account) {
-	return(row.names(holdings(account)))
-}
-
-setMethod("currentPositions",
-		signature("Account"),
-		function(object) {
-			positions <- holdings(object)$size
-			names(positions) <- heldInstruments(object)
-			return(positions)
+setGeneric("updateAccount",
+		function(object, transactions, ...) {
+			standardGeneric("updateAccount")
 		})
 
-setMethod("updateAccounts",
+setMethod("updateAccount",
 		signature("Account"),
 		function(object, transactions) {
 			if (length(transactions)) {
-				holdings <- holdings(object)
-				holdings <- pad_with_empty_rows(holdings, transactions)
-				transactions <- pad_with_empty_rows(transactions, holdings)
-				transactions <- calculate_missing_prices(transactions, holdings)
-				
-				object@holdings <- updateHoldings(holdings, transactions)
 				object@cash <- updateCash(object, transactions)
 			}
 			return(object)
 		})
-
-updateHoldings <- function(holdings, transactions) {
-	holdings$size <- holdings$size + transactions$size
-	holdings$costs <- holdings$costs + transactions$costs
-	holdings$value <- holdings$size * transactions$price
-	return(holdings)
-}
 
 updateCash <- function(account, transactions) {
 	transaction.value <- sum(transactions$size * transactions$price)
@@ -74,23 +37,5 @@ updateCash <- function(account, transactions) {
 	return(cashIn(account) - transaction.value - transaction.costs)
 }
 
-pad_with_empty_rows <- function(frame, target) {
-	
-	target.rows <- row.names(target)
-	rows <- target.rows[!target.rows %in% row.names(frame)]
-	new.rows <- data.frame(array(0, dim = c(length(rows), 3)), row.names = rows)
-	colnames(new.rows) <- colnames(frame)
-	frame <- rbind(frame, new.rows)
-	frame <- frame[sort(row.names(frame)), ]
-	return(frame)
-}
-
-calculate_missing_prices <- function(transactions, holdings) {
-	rows <- transactions$size == 0
-	missing.prices <- holdings[rows, "value"] / holdings[rows, "size"]
-	missing.prices[!is.finite(missing.prices)] <- 0
-	transactions[rows, "price"] <- missing.prices
-	return(transactions)
-}
 
 

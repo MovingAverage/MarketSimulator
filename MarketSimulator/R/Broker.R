@@ -25,6 +25,11 @@ default_cost_model <- function(order) {
 	return(0)
 }
 
+InteractiveBrokers_cost_model <- function(order) {
+	value <- quantity(order) * execution_price(order)
+	return(max(value * 0.0008, 6))
+}
+
 addTxnCostModel <- function(broker, model) {
 	broker@cost.model <- model
 	return(broker)
@@ -32,9 +37,7 @@ addTxnCostModel <- function(broker, model) {
 
 addMarket <- function(broker, market) {
 			broker@market <- market
-			instruments <- tradeableInstruments(market)
-			prices <- numeric(length(instruments))
-			names(prices) <- instruments
+			prices <- zero_named_vector(tradeableInstruments(market))
 			setLatestPrices(broker, prices)
 			return(broker)
 		}
@@ -100,8 +103,7 @@ removeFromOpenOrders <- function(broker, order) {
 
 addTransactionRecord <- function(broker, order) {
 	transaction <- writeTransaction(order)
-	transactions <- get("transactions", envir = broker@transactions)
-	transactions <- rbind(transactions, transaction)
+	transactions <- rbind(transactions(broker), transaction)
 	setTransactions(broker, transactions)
 }
 
@@ -126,12 +128,7 @@ hasSimilarOrder <- function(broker, order) {
 
 getSimilarOrder <- function(broker, order) {
 	open.orders <- openOrders(broker, instrumentOf(order))
-	return_if_same_class <- function(test.order, benchmark.order) {
-		if (class(test.order) == class(benchmark.order)) {
-			return(test.order)
-		}
-	}
-	similar.orders <- lapply(open.orders, return_if_same_class, benchmark.order = order)
+	similar.orders <- open.orders[sapply(open.orders, class) == class(order)]
 	if (length(similar.orders) > 1) stop("More than one similar order found")
 	if (length(similar.orders) == 1) {
 		return(similar.orders[[1]])
@@ -155,14 +152,16 @@ getOrders <- function(broker, instrument, type) {
 						paste(possible.types, collapse = ", ")))
 	}
 	order.list <- tryCatch(
-			get(instrument, slot(broker, type)), 
+			get(instrument, slot(broker, type), inherits = FALSE), 
 			error = function(e) list())
 	return(order.list)
 }
 
-activeInstruments <- function(broker) {
-	return(ls(broker@open.orders))
-}
+setMethod("activeInstruments",
+		signature("Broker"),
+		function(object) {
+			return(ls(object@open.orders))
+		})
 
 tradedInstruments <- function(broker) {
 	return(ls(broker@closed.orders))
@@ -198,82 +197,30 @@ notifyOrders <- function(broker, instrument, price.bar) {
 }
 
 recordLatestPrice <- function(broker, price) {
-	if (length(price) == 0) {
-		return()
-	} else {
-		price.names <- names(price)
-		splits <- strsplit(price.names, "\\.")[[1]]
-		instrument <- paste(splits[-length(splits)], collapse = ".")
-		price <- as.numeric(price)
-		names(price) <- instrument
-		
+	if (length(price) != 0) {
+		price <- remove_price_OHLC_flag(price)
 		latest.prices <- latestPrices(broker)
 		latest.prices[names(price)] <- price
 		setLatestPrices(broker, latest.prices)
 	}
 }
 
-latestPrices <- function(broker) {
-	get("latest.prices", broker@transactions)
+remove_price_OHLC_flag <- function(price) {
+	splits <- strsplit(names(price), "\\.")[[1]]
+	instrument <- paste(splits[-length(splits)], collapse = ".")
+	price <- as.numeric(price)
+	names(price) <- instrument
+	return(price)
 }
+
+setMethod("latestPrices",
+		signature(),
+		function(object) {
+			get("latest.prices", object@transactions)
+		})
 
 setLatestPrices <- function(broker, prices) {
 	assign("latest.prices", prices, broker@transactions)
-}
-
-setupAccount <- function(broker, starting.equity) {
-	account <- Account(starting.equity)
-	setAccount(broker, account)
-}
-
-setAccount <- function(broker, account) {
-	assign("account", account, broker@transactions)
-}
-
-accountAt <- function(broker) {
-	get("account", broker@transactions)
-}
-
-setMethod("updateAccounts",
-		signature("Broker"),
-		function(object) {
-			account <- updateAccounts(accountAt(object), transactions(object))
-			setAccount(object, account)
-			clearTransactions(object)
-		})
-
-currentPositionFractions <- function(broker) {
-	return(currentPositions(broker) * latestPrices(broker) / currentEquity(broker))
-}
-
-currentEquity <- function(broker) {
-	equity(accountAt(broker))
-}
-
-setMethod("currentPositions",
-		signature("Broker"),
-		function(object) {
-			tradeable.instruments <- tradeableInstruments(object)
-			positions <- numeric(length(tradeable.instruments))
-			names(positions) <- tradeable.instruments
-			account.positions <- currentPositions(accountAt(object))
-			positions[names(account.positions)] <- account.positions
-			order.sizes <- orderSizes(object)
-			return(positions + order.sizes)
-		})
-
-orderSizes <- function(broker) {
-	
-	tradeable.instruments <- tradeableInstruments(broker)
-	order.sizes <- numeric(length(tradeable.instruments))
-	names(order.sizes) <- tradeable.instruments
-	for (instrument in tradeable.instruments) {
-		orders <- openOrders(broker, instrument)
-		if (length(orders)) {
-			order.sizes[instrument] <- sum(sapply(orders, quantity))
-		}
-	}
-	return(order.sizes)
 }
 
 #' Print closed orders as quantstrat order_book object
@@ -321,21 +268,16 @@ printOrderBook <- function(broker, portfolio) {
 #' console.
 #' 
 portfolioTxns <- function(broker, portfolio, verbose = TRUE) {
-	
 	for (instrument in tradedInstruments(broker)) {
 		for (order in closedOrders(broker, instrument)) {
-			
 			addTxn(portfolio, instrument, 
 					TxnDate = statusTime(order), 
 					TxnQty = quantity(order), 
 					TxnPrice = execution_price(order), 
 					TxnFees = -txnFees(order), 
 					verbose = verbose)
-			
 		}
 	}
-	
-	
 }
 
 setMethod("show",
