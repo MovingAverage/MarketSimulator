@@ -13,7 +13,7 @@ context("Creating Position object")
 				
 				expect_that(position, is_a("CurrentPosition"))
 				expect_that(instrumentOf(position), equals("AMP"))
-				expect_that(market_order(position), matchesObject(order))
+				expect_that(size_orders(position), matchesObject(order))
 			})
 	
 	test_that("CurrentPosition throws error if wrong orders given", {
@@ -24,6 +24,7 @@ context("Creating Position object")
 				expect_that(Position("AMP", bhp.orders), throws_error("instrument"))
 			})
 
+	
 context("Current positions")
 
 	test_that("Empty position produces zero vector", {
@@ -44,7 +45,6 @@ context("Current positions")
 	
 	test_that("Position with current holding returns holding", {
 				
-				account <- Account(1000)
 				position <- Position("AMP", list(), size = 100)
 				
 				expect_that(totalSize(position), 
@@ -53,7 +53,6 @@ context("Current positions")
 	
 	test_that("Position with holding and open order adds them", {
 				
-				account <- Account(1000)
 				position <- Position("AMP", list(Order("AMP", buy = 100)), size = 100)
 				
 				expect_that(totalSize(position), 
@@ -75,155 +74,161 @@ context("Current positions")
 						matchesObject(c(AMP = 100), ignore.attributes = FALSE))
 			})
 	
-	
-context("List of positions")
-	
-	test_that("Positions reports on position names", {
+	test_that("Position with MarketWithStop order reports on size", {
 				
-				instruments <- c("AMP", "BHP", "CBA")
-				account <- Mock("Account")
-				mockMethod(account, "holdings", data.frame(
-								size = numeric(3), row.names = instruments))
-				position <- PositionSet(account, numeric())
+				position <- Position("AMP", list(
+								MarketWithStop("AMP", buy = 100, stop.point = 0.02)))
 				
-				for (instrument in instruments) {
-					position <- addPosition(position, instrument)
-				}
-				
-				expect_that(activeInstruments(position), matchesObject(instruments))
-			})
-	
-	test_that("Adding positions", {
-				
-				instruments <- c("AMP", "BHP", "CBA")
-				account <- Account(1000)
-				sizes <- c(10, 20, 30)
-				names(sizes) <- instruments
-				position <- PositionSet(account, numeric())
-				
-				for (instrument in instruments) {
-					position <- addPosition(position, instrument, 
-							size = sizes[instrument])
-				}
-				
-				expect_that(activeInstruments(position), matchesObject(instruments))
-				expect_that(totalSize(position@positions[[1]]), matchesObject(10))
-			})
-	
-	test_that("Creates new position when adding Target if needed", {
-				
-				positions <- PositionSet(Account(0), numeric())
-				target <- Target("AMP", 100)
-				positions <- addTarget(positions, target)
-				
-				expected.position <- Position("AMP")
-				expected.position@target <- target
-				
-				expect_that(getPosition(positions, "AMP"), 
-						matchesObject(expected.position))
+				expect_that(totalSize(position), 
+						matchesObject(c(AMP = 100), ignore.attributes = FALSE))
 			})
 
-	
-context("Accounting calculations")
 
-	test_that("Positions calculate current equity", {
-				
-				account <- Account(5000)
-				latest.prices <- c(AMP = 20, BHP = 10)
-				positions <- PositionSet(account, latest.prices)
-				amp <- Position("AMP")
-				amp@size <- 100
-				bhp <- Position("BHP")
-				bhp@size <- 200
-				
-				positions <- setPosition(positions, amp)
-				positions <- setPosition(positions, bhp)
-				
-				expect_that(currentEquity(positions), matchesObject(9000))
-			})
-	
-	
 context("Expected transaction value and size")
 	
 	test_that("Transaction size always given as integer", {
 				
-				account <- Account(10000)
 				latest.prices <- c(AMP = 5)
-				positions <- PositionSet(account, latest.prices)
-				positions <- addPosition(positions, "AMP")
-				positions <- addTarget(positions, Target("AMP", size = 1/7))
+				
+				manager <- Manager(Mock("Strategy"))
+				latestPrices(manager) <- latest.prices
+				manager <- setupAccount(manager, 10000)
+				manager <- setPosition(manager, Position("AMP"))
+				manager <- addTarget(manager, Target("AMP", size = 1/7))
+				position <- getPosition(manager, "AMP")
 				size <- as.integer((1/7) * 10000 / latest.prices)
 				
-				expect_that(transactionSize(positions, "AMP"), 
+				expect_that(transactionSize(position, manager), 
 						matchesObject(c(AMP = size), ignore.attributes = FALSE))
 			})
 	
 	test_that("When no existing position", {
 				
-				account <- Account(10000)
 				latest.prices <- c(AMP = 5)
-				position <- PositionSet(account, latest.prices)
-				position <- addPosition(position, "AMP")
-				position <- addTarget(position, Target("AMP", size = 0.5))
 				
-				expect_that(transactionValue(position, "AMP"), matchesObject(5000))
-				expect_that(transactionSize(position, "AMP"), matchesObject(1000))
+				manager <- Manager(Mock("Strategy"))
+				latestPrices(manager) <- latest.prices
+				manager <- setupAccount(manager, 10000)
+				manager <- setPosition(manager, Position("AMP"))
+				manager <- addTarget(manager, Target("AMP", size = 0.5))
+				position <- getPosition(manager, "AMP")
+				
+				expect_that(transactionValue(position, manager), matchesObject(5000))
+				expect_that(transactionSize(position, manager), matchesObject(1000))
 			})
 	
 	test_that("When has existing position", {
 				
-				account <- Account(8000)
 				latest.prices <- c(AMP = 5)
-				position <- PositionSet(account, latest.prices)
-				position <- addPosition(position, "AMP", size = 400)
-				position <- addTarget(position, Target("AMP", size = 0.5))
 				
-				expect_that(transactionValue(position, "AMP"), matchesObject(3000))
-				expect_that(transactionSize(position, "AMP"), matchesObject(600))
+				manager <- Manager(Mock("Strategy"))
+				latestPrices(manager) <- latest.prices
+				manager <- setupAccount(manager, 8000)
+				manager <- setPosition(manager, Position("AMP", size = 400))
+				manager <- addTarget(manager, Target("AMP", size = 0.5))
+				position <- getPosition(manager, "AMP")
+				
+				expect_that(transactionValue(position, manager), matchesObject(3000))
+				expect_that(transactionSize(position, manager), matchesObject(600))
 			})
 	
 	test_that("When has no position, but open order", {
 				
-				account <- Account(10000)
 				latest.prices <- c(AMP = 5)
-				position <- PositionSet(account, latest.prices)
-				position <- addPosition(position, "AMP", list(Order("AMP", buy = 400)))
-				position <- addTarget(position, Target("AMP", size = 0.5))
 				
-				expect_that(transactionValue(position, "AMP"), matchesObject(5000))
-				expect_that(transactionSize(position, "AMP"), matchesObject(1000))
+				manager <- Manager(Mock("Strategy"))
+				latestPrices(manager) <- latest.prices
+				manager <- setupAccount(manager, 10000)
+				manager <- setPosition(manager, 
+						Position("AMP", list(Order("AMP", buy = 400))))
+				manager <- addTarget(manager, Target("AMP", size = 0.5))
+				position <- getPosition(manager, "AMP")
+				
+				expect_that(transactionValue(position, manager), matchesObject(5000))
+				expect_that(transactionSize(position, manager), matchesObject(1000))
 			})
 	
 	test_that("When existing position and open orders", {
 				
-				account <- Account(9000)
 				latest.prices <- c(AMP = 5)
-				position <- PositionSet(account, latest.prices)
-				position <- addPosition(position, "AMP", 
-						list(Order("AMP", buy = 200)), size = 200)
-				position <- addTarget(position, Target("AMP", size = 0.5))
 				
-				expect_that(transactionValue(position, "AMP"), matchesObject(4000))
-				expect_that(transactionSize(position, "AMP"), matchesObject(800))
-			})
+				manager <- Manager(Mock("Strategy"))
+				latestPrices(manager) <- latest.prices
+				manager <- setupAccount(manager, 9000)
+				manager <- setPosition(manager, 
+						Position("AMP", list(Order("AMP", buy = 200)), size = 200))
+				manager <- addTarget(manager, Target("AMP", size = 0.5))
+				position <- getPosition(manager, "AMP")
+				
+				expect_that(transactionValue(position, manager), matchesObject(4000))
+				expect_that(transactionSize(position, manager), matchesObject(800))
+			})	
 	
 	
 context("Sending orders to Broker")	
 	
-	test_that("Position sends Market buy order", {
-				
-				account <- Account(10000)
-				latest.prices <- c(AMP = 10)
-				position <- PositionSet(account, latest.prices)
-				position <- addPosition(position, "AMP")
+	test_that("Market order sent for new target", {
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "addOrder")
 				
-				target <- Target("AMP", size = 0.5)
+				position <- Position("AMP")
+				position <- setTarget(position, Target("AMP", 0.5))
+				expected.order <- Order("AMP", buy = 100)
 				
-				position <- addTarget(position, target)
-				position <- fireOrder(position, broker, "AMP")
+				position <- sendOrders(position, 100, broker)
+				
+				expect_that(broker, called_once_with("addOrder", expected.order))
+				expect_that(notice(position), matchesObject("buy 100 AMP"))
+			})
+	
+	test_that("Sell order sent for zero target", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "addOrder")
+				
+				position <- Position("AMP", size = 100)
+				expected.order <- Order("AMP", sell = 100)
+				target <- Target("AMP", 0)
+				position <- setTarget(position, target)
+				
+				position <- sendOrders(position, -100, broker)
+				
+				expect_that(broker, called_once_with("addOrder", expected.order))
+				expect_that(notice(position), matchesObject("sell all (100) AMP"))
+			})
+	
+	test_that("Market and Stop order sent", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "addOrder")
+				
+				position <- Position("AMP")
+				target <- Target("AMP", 0.5, stop.point = 0.02)
+				position <- setTarget(position, target)
+				
+				position <- sendOrders(position, 100, broker)
+				
+				expect_that(broker, called_once_with("addOrder", 
+								MarketWithStop("AMP", buy = 100, stop.point = 0.02)))
+				expect_that(notice(position), matchesObject("buy 100 AMP"))
+			})
+	
+	test_that("Position sends Market buy order", {
+				
+				latest.prices <- c(AMP = 10)
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "addOrder")
+				
+				manager <- Mock("Manager")
+				mockMethod(manager, "isViable", TRUE)
+				mockMethod(manager, "latestPrices", latest.prices)
+				mockMethod(manager, "targetPositions", list(Target("AMP", size = 0.5)))
+				manager <- setupAccount(manager, 10000)
+				manager <- setPosition(manager, Position("AMP"))
+				
+				manager <- placeOrders(manager, broker, timestamp)
 				
 				expect_that(broker, 
 						called_once_with("addOrder", Order("AMP", buy = 500)))
@@ -231,63 +236,39 @@ context("Sending orders to Broker")
 	
 	test_that("Position sends Market sell order", {
 				
-				account <- Account(5000)
 				latest.prices <- c(AMP = 10)
-				position <- PositionSet(account, latest.prices)
-				position <- addPosition(position, "AMP", size = 500)
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "addOrder")
 				
-				target <- Target("AMP", size = 0)
+				manager <- Mock("Manager")
+				mockMethod(manager, "isViable", TRUE)
+				mockMethod(manager, "latestPrices", latest.prices)
+				mockMethod(manager, "targetPositions", list(Target("AMP", size = 0)))
+				manager <- setupAccount(manager, 5000)
+				manager <- setPosition(manager, Position("AMP", size = 500))
 				
-				position <- addTarget(position, target)
-				position <- fireOrder(position, broker, "AMP")
+				manager <- placeOrders(manager, broker, timestamp)
 				
 				expect_that(broker, 
 						called_once_with("addOrder", Order("AMP", sell = 500)))
 			})
 	
-	test_that("Orders sent for all positions", {
-				
-				account <- Account(10000)
-				latest.prices <- c(AMP = 5, BHP = 10)
-				positions <- PositionSet(account, latest.prices)
-				positions <- addPosition(positions, "AMP")
-				positions <- addPosition(positions, "BHP")
-				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", 
-						list(Target("AMP", size = 0.5), Target("BHP", size = 0.4)))
-				
-				manager <- Manager(strategy)
-				manager@positions <- positions
-				
-				broker <- Mock("Broker")
-				mockMethod(broker, "addOrder")
-				
-				manager <- placeOrders(manager, broker, timestamp = "")
-				
-				expect_that(broker, has_calls(
-								addOrder(broker, Order("AMP", buy = 1000)), 
-								addOrder(broker, Order("BHP", buy = 400))))
-			})
-	
 	test_that("Order not sent if existing open order", {
-				
-				account <- Account(10000)
-				latest.prices <- c(AMP = 10)
-				position <- PositionSet(account, latest.prices)
-				position <- addPosition(position, "AMP", list(Order("AMP", buy = 500)))
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "addOrder")
 				mockMethod(broker, "replaceOrder")
 				
-				target <- Target("AMP", size = 0.5)
+				manager <- Mock("Manager")
+				mockMethod(manager, "isViable", TRUE)
+				mockMethod(manager, "latestPrices", c(AMP = 10))
+				mockMethod(manager, "targetPositions", list(Target("AMP", size = 0.5)))
+				manager <- setupAccount(manager, 10000)
+				manager <- setPosition(manager, 
+						Position("AMP", list(Order("AMP", buy = 500))))
 				
-				position <- addTarget(position, target)
-				position <- fireOrder(position, broker, "AMP")
+				manager <- placeOrders(manager, broker, timestamp)
 				
 				expect_that(broker, not_called("addOrder"))
 				expect_that(broker, not_called("replaceOrder"))
@@ -295,26 +276,93 @@ context("Sending orders to Broker")
 	
 	test_that("Order replaced if existing but not correct size", {
 				
-				account <- Account(10000)
-				latest.prices <- c(AMP = 10)
-				position <- PositionSet(account, latest.prices)
 				order <- Order("AMP", buy = 300)
-				order <- setID(order, 1L) 
-				position <- addPosition(position, "AMP", list(order))
+				order <- setID(order, "o1") 
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "replaceOrder")
 				
-				target <- Target("AMP", size = 0.5)
+				manager <- Mock("Manager")
+				mockMethod(manager, "isViable", TRUE)
+				mockMethod(manager, "latestPrices", c(AMP = 10))
+				mockMethod(manager, "targetPositions", list(Target("AMP", size = 0.5)))
+				manager <- setupAccount(manager, 10000)
+				manager <- setPosition(manager, Position("AMP", list(order)))
 				
-				position <- addTarget(position, target)
-				position <- fireOrder(position, broker, "AMP")
+				position <- placeOrders(manager, broker, timestamp)
 				
 				expected.order <- order
 				expected.order@quantity <- 500L
 				
 				expect_that(broker, has_calls(replaceOrder(broker, expected.order)))
 			})
+	
+	test_that("Order not sent if position stopped", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "addOrder")
+				
+				manager <- Mock("Manager")
+				mockMethod(manager, "isViable", TRUE)
+				mockMethod(manager, "latestPrices", c(AMP = 10))
+				mockMethod(manager, "targetPositions", list(Target("AMP", size = 0.5)))
+				manager <- setupAccount(manager, 10000)
+				
+				position <- Position("AMP", size = 0)
+				position@target <- Target("AMP", size = 0.5)
+				position@status <- Stopped()
+				manager <- setPosition(manager, position)
+				
+				manager <- placeOrders(manager, broker, timestamp)
+				
+				expect_that(broker, not_called("addOrder"))
+			})
+	
+	test_that("Position cancels stops when closed", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "addOrder")
+				mockMethod(broker, "cancelOrder")
+				
+				manager <- Manager(Mock("Strategy"))
+				manager <- setupAccount(manager, 10000)
+				
+				stop.order <- Stop("AMP", sell = 1000, at = xts())
+				stop.order <- setID(stop.order, "o1")
+				stop.order@status <- NullStatus()
+				
+				sell.order <- Order("AMP", sell = 1000)
+				
+				position <- Position("AMP", size = 1000)
+				position@target <- Target("AMP", size = 1, stop.point = 0.02)
+				position@orders <- list(o1 = stop.order)
+				
+				manager <- setPosition(manager, position)
+				manager <- addTarget(manager, Target("AMP", size = 0))
+				position <- getPosition(manager, "AMP")
+				
+				position <- sendOrders(position, size = -1000, broker)
+				
+				expect_that(broker, called_once_with("cancelOrder", stop.order))
+				expect_that(broker, called_once_with("addOrder", sell.order))
+			})
+	
+
+context("Position status transitions")
+
+	test_that("Stopped position returns to open", {
+				
+				position <- Position("AMP", size = 0)
+				position@status <- Stopped()
+				position@target <- Target("AMP", size = 0)
+				
+				new.target <- Target("AMP", size = 1, stop.point = 0.01)
+				
+				position <- setTarget(position, new.target)
+				
+				expect_that(status(position), matchesObject(Open()))
+			})
+
 	
 context("Position order notices")
 
@@ -323,7 +371,7 @@ context("Position order notices")
 				position <- Position("AMP")
 				position <- addNotice(position, 100)
 				
-				test_that(notice(position), matchesObject("buy 100 AMP"))
+				expect_that(notice(position), matchesObject("buy 100 AMP"))
 			})
 	
 	test_that("Sell notice", {
@@ -332,7 +380,7 @@ context("Position order notices")
 				position@target <- Target("AMP", 10)
 				position <- addNotice(position, -100)
 				
-				test_that(notice(position), matchesObject("sell 100 AMP"))
+				expect_that(notice(position), matchesObject("sell 100 AMP"))
 			})
 	
 	test_that("Sell all notice", {
@@ -341,7 +389,7 @@ context("Position order notices")
 				position@target <- Target("AMP", 0)
 				position <- addNotice(position, -100)
 				
-				test_that(notice(position), matchesObject("sell all (100) AMP"))
+				expect_that(notice(position), matchesObject("sell all (100) AMP"))
 			})
 	
 	test_that("Empty notice returns empty character vector", {
@@ -350,100 +398,12 @@ context("Position order notices")
 				
 				expect_that(notice(position), matchesObject(character(0)))
 			})
-	
-	test_that("Multiple notices", {
-				
-				account <- Account(10000)
-				latest.prices <- c(AMP = 1)
-				positions <- PositionSet(account, latest.prices)
-				
-				amp <- Position("AMP")
-				amp@target <- Target("AMP", 10)
-				amp <- addNotice(amp, -100)
-				positions <- setPosition(positions, amp)
-				
-				bhp <- Position("BHP")
-				bhp <- addNotice(bhp, 100)
-				positions <- setPosition(positions, bhp)
-				
-				expected.notice <- "sell 100 AMP, buy 100 BHP"
-				
-				test_that(notices(positions), equals(expected.notice))
-			})
-	
-	test_that("Two empty notices", {
-				
-				account <- Account(10000)
-				latest.prices <- c(AMP = 1)
-				positions <- PositionSet(account, latest.prices)
-				positions <- addPosition(positions, "AMP")
-				positions <- addPosition(positions, "BHP")
-				
-				test_that(notices(positions), equals(character(0)))
-			})
-	
-	test_that("One notice out of two", {
-				
-				account <- Account(10000)
-				latest.prices <- c(AMP = 1)
-				positions <- PositionSet(account, latest.prices)
-				
-				positions <- addPosition(positions, "AMP")
-				
-				bhp <- Position("BHP")
-				bhp <- addNotice(bhp, 100)
-				positions <- setPosition(positions, bhp)
-				
-				test_that(notices(positions), equals("buy 100 BHP"))
-			})
+
 	
 
-context("Updating Positions after transactions")
+	
 
-				cleanMockMethods()
 
-	test_that("Position size added with transaction", {
-				
-				broker <- Mock("Broker")
-				transaction <- data.frame(size = 100, price = 1, costs = 6, 
-						row.names = "AMP")
-				mockMethod(broker, "transactions", transaction)
-				mockMethod(broker, "latestPrices", numeric())
-				mockMethod(broker, "tradeableInstruments", "AMP")
-				
-				manager <- Manager(Mock("Strategy"))
-				manager@positions <- PositionSet(Account(0), numeric())
-				manager@positions <- addPosition(manager@positions, "AMP")
-				
-				manager <- updatePositions(manager, broker)
-				
-				position <- getPosition(manager@positions, "AMP")
-				
-				expect_that(totalSize(position), matchesObject(100))
-			})
-	
-	test_that("Position size subtracted with transaction", {
-				
-				broker <- Mock("Broker")
-				transaction <- data.frame(size = -100, price = 1, costs = 6, 
-						row.names = "AMP")
-				mockMethod(broker, "transactions", transaction)
-				mockMethod(broker, "latestPrices", numeric())
-				mockMethod(broker, "tradeableInstruments", "AMP")
-				
-				manager <- Manager(Mock("Strategy"))
-				manager@positions <- PositionSet(Account(0), numeric())
-				amp <- Position("AMP", size = 100)
-				manager@positions <- setPosition(manager@positions, amp)
-				
-				manager <- updatePositions(manager, broker)
-				
-				position <- getPosition(manager@positions, "AMP")
-				
-				expect_that(totalSize(position), matchesObject(0))
-			})
-	
-	
 	
 	
 	

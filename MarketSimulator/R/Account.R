@@ -32,9 +32,14 @@ setMethod("updateAccount",
 		})
 
 updateCash <- function(account, transactions) {
-	transaction.value <- sum(transactions$size * transactions$price)
-	transaction.costs <- sum(transactions$costs)
-	return(cashIn(account) - transaction.value - transaction.costs)
+	cash <- cashIn(account)
+	for (txn in transactions) {
+		transaction.value <- as.numeric(quantity(txn) * execution_price(txn))
+		transaction.costs <- as.numeric(txnFees(txn))
+		cash <- cash - transaction.value - transaction.costs
+	}
+	
+	return(as.numeric(cash))
 }
 
 

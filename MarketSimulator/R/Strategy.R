@@ -39,7 +39,13 @@ setMethod("targetPositions",
 			targets <- list()
 			for (instrument in names(positions)) {
 				size <- as.numeric(positions[instrument])
-				targets[instrument] <- Target(instrument, size)
+				if (is.na(size)) size <- 0
+				if (size > 0) {
+					targets[instrument] <- Target(instrument, size, stop.point = 0.02)
+				} else {
+					targets[instrument] <- Target(instrument, size)
+				}
+				
 			}
 			
 			return(targets)
@@ -47,12 +53,14 @@ setMethod("targetPositions",
 
 
 
-#2007-01-05: buy 999 AMP.AX
-#2007-01-09: sell all (-999) AMP.AX
-#2007-02-01: buy 989 AMP.AX
-#2007-02-06: sell 0 AMP.AX
-#2007-02-07: sell -1 AMP.AX
-#2007-02-08: sell all (-988) AMP.AX
-#2007-02-16: buy 981 AMP.AX
-#2007-02-19: sell all (-981) AMP.AX
+
+
+
+
+
+
+
+
+
+
 

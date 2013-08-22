@@ -6,7 +6,7 @@ BackTest <- function(manager, broker, start.date, end.date) {
 		# During trading day
 		marketActivity(broker, timestamp)
 		# At close of trading
-		manager <- updatePositions(manager, broker)
+		manager <- updateRecords(manager, broker)
 		# Before next days trading
 		manager <- placeOrders(manager, broker, timestamp)
 		manager <- sendNotices(manager, timestamp)

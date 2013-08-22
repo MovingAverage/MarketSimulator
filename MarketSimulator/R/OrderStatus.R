@@ -71,3 +71,17 @@ setMethod("callUpdateProcedure",
 		function(status, order, broker) {
 			cancelOrder(broker, order)
 		})
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -18,7 +18,8 @@ Broker <- function() {
 			transactions = as.environment(list(
 							transactions = data.frame(),
 							latest.prices = c(), 
-							todays.date = initDate())))
+							todays.date = initDate(), 
+							next.id = 1)))
 }
 
 default_cost_model <- function(order) {
@@ -61,6 +62,7 @@ addOrder <- function(broker, order) {
 	if (!inherits(order, "Order")) {
 		stop("Only orders derived from class 'Order' may be added to Broker")
 	}
+	order <- setOrderID(order, broker)
 	order <- setTxnCostModel(order, broker@cost.model)
 	submissionTime(order) <- today(broker)
 	if (hasSimilarOrder(broker, order)) {
@@ -74,9 +76,19 @@ addOrder <- function(broker, order) {
 
 addOrderToBook <- function(broker, order, order.book) {
 	order.list <- getOrders(broker, instrumentOf(order), order.book)
-	order <- setID(order, as.integer(length(order.list) + 1))
-	order.list <- c(order.list, list(order))
+	order.list[getID(order)] <- order
 	assign(instrumentOf(order), order.list, slot(broker, order.book))
+}
+
+setOrderID <- function(order, broker) {
+	order <- setID(order, nextID(broker))
+	return(order)
+}
+
+nextID <- function(broker) {
+	ID <- get("next.id", broker@transactions)
+	assign("next.id", ID + 1, broker@transactions)
+	return(paste0("o", ID))
 }
 
 closeOrder <- function(broker, order) {
@@ -102,8 +114,7 @@ removeFromOpenOrders <- function(broker, order) {
 }
 
 addTransactionRecord <- function(broker, order) {
-	transaction <- writeTransaction(order)
-	transactions <- rbind(transactions(broker), transaction)
+	transactions <- c(getTransactions(broker), order)
 	setTransactions(broker, transactions)
 }
 
@@ -112,13 +123,13 @@ setTransactions <- function(broker, transactions) {
 }
 
 #' Return transaction records
-transactions <- function(broker) {
+getTransactions <- function(broker) {
 	get("transactions", broker@transactions)
 }
 
 #' Clear transaction records
 clearTransactions <- function(broker) {
-	assign("transactions", data.frame(), broker@transactions)	
+	assign("transactions", list(), broker@transactions)	
 }
 
 hasSimilarOrder <- function(broker, order) {
@@ -128,7 +139,7 @@ hasSimilarOrder <- function(broker, order) {
 
 getSimilarOrder <- function(broker, order) {
 	open.orders <- openOrders(broker, instrumentOf(order))
-	similar.orders <- open.orders[sapply(open.orders, class) == class(order)]
+	similar.orders <- open.orders[vapply(open.orders, areSimilar, logical(1), order)]
 	if (length(similar.orders) > 1) stop("More than one similar order found")
 	if (length(similar.orders) == 1) {
 		return(similar.orders[[1]])
@@ -146,6 +157,9 @@ closedOrders <- function(broker, instrument) {
 }
 
 getOrders <- function(broker, instrument, type) {
+	if (missing(instrument)) {
+		stop("Must supply instrument name of orders")
+	}
 	possible.types <- c("open.orders", "closed.orders")
 	if (!type %in% possible.types) {
 		stop(paste("order.type must be one of:", 
@@ -191,8 +205,15 @@ marketActivity <- function(broker, timestamp) {
 
 #' Notify each order of prices for day.
 notifyOrders <- function(broker, instrument, price.bar) {
-	for (order in openOrders(broker, instrument)) {
-		notify(order, broker, price.bar)
+	
+	unchecked.orders <- openOrders(broker, instrument)
+	
+	while (length(unchecked.orders) > 0) {
+		for (order in unchecked.orders) {
+			notify(order, broker, price.bar)
+		}
+		open.orders <- openOrders(broker, instrument)
+		unchecked.orders <- open.orders[!open.orders %in% unchecked.orders] 
 	}
 }
 
@@ -290,7 +311,7 @@ setMethod("show",
 			closed.orders <- numeric()
 			for (instrument in activeInstruments(object)) {
 				for (order in openOrders(object, instrument)) {
-					open.orders <- rbind(open.orders, as.data.frame(order))
+					open.orders <- rbind(open.orders, asDataFrame(order))
 				}
 			}
 			for (instrument in tradedInstruments(broker)) {
@@ -302,7 +323,7 @@ setMethod("show",
 			print("Number of closed orders:")
 			print(closed.orders)
 			print("Last Transactions:")
-			print(transactions(broker))
+			print(getTransactions(broker))
 		})
 
 

@@ -4,7 +4,7 @@
 setClass("Order", 
 		representation(
 			instrument = "character",
-			ID = "integer", 
+			ID = "character", 
 			status = "OrderStatus",
 			quantity = "integer",
 			execution.price = "xts", 
@@ -68,31 +68,28 @@ statusTime <- function(order) {
 	return(order@status.time)
 }
 
+setGeneric("areSimilar",
+		function(order1, order2, ...) {
+			return(identical(class(order1), class(order2)))
+		})
+
 setGeneric("mergeOrders",
 		function(existing.order, new.order) {
 			if (instrumentOf(existing.order) != instrumentOf(new.order)) {
 				stop("Instruments differ between orders")
 			}
-			if (class(existing.order) != class(new.order)) {
+			if (inherits(existing.order, "Order", which = TRUE) != 
+					inherits(new.order, "Order", which = TRUE)) {
 				stop("Attempt to merge different order types")
 			}
-			quantity <- quantity(existing.order) + quantity(new.order)
-			if (quantity > 0) {
-				order <- Order(instrumentOf(existing.order), buy = quantity)
-			} else {
-				order <- Order(instrumentOf(existing.order), sell = quantity)
-				if (quantity == 0) {
-					order@status <- NullStatus()
-				}
-			}
+			order <- standardGeneric("mergeOrders")
 			order <- setTxnCostModel(order, existing.order@txn.cost.model)
 			order <- setID(order, getID(existing.order))
+			if (quantity(order) == 0) {
+				order@status <- NullStatus()
+			}
 			return(order)
 		})
-
-updateOrder <- function(order, broker) {
-	callUpdateProcedure(order@status, order, broker)
-}
 
 writeTransaction <- function(order) {
 	data.frame(
@@ -102,23 +99,21 @@ writeTransaction <- function(order) {
 			row.names = instrumentOf(order))
 }
 
-as.data.frame.Order <- function(x) {
+asDataFrame <- function(x) {
 	
-	value_or_default <- function(value, default) {
-		if (length(value) == 0) {
-			value <- default
-		}
-		return(value)
-	}
+	order <- list(
+			type = class(x), 
+			ID = getID(x), 
+			instrument = instrumentOf(x), 
+			status = status(x), 
+			quantity = quantity(x), 
+			price = execution_price(x), 
+			submitted = submissionTime(x), 
+			updated = statusTime(x))
 	
-	data.frame(
-			ID = value_or_default(getID(x), NA), 
-			instrument = value_or_default(instrumentOf(x), NA), 
-			status = value_or_default(status(x), NA), 
-			quantity = value_or_default(quantity(x), 0), 
-			price = value_or_default(execution_price(x), NA), 
-			submitted = value_or_default(submissionTime(x), initDate()), 
-			updated = value_or_default(statusTime(x), initDate()))
+	order <- order[sapply(order, length) == 1 & sapply(order, class) != "S4"]
+	
+	as.data.frame(order)
 }
 
 bookEntry <- function(order) {
@@ -144,7 +139,7 @@ bookEntry <- function(order) {
 setMethod("show",
 		signature(object = "Order"),
 		function(object) {
-			show(as.data.frame(object))
+			show(asDataFrame(object))
 		})
 
 #' notify order of market activity
@@ -177,7 +172,7 @@ active_market <- function(price.bar) {
 }
 
 not_NA_or_Zero <- function(value) {
-	!(is.na(value) || value == 0)
+	!(is.na(value) || value == 0 || length(value) == 0)
 }
 
 execute <- function(order, at, broker) {
@@ -185,6 +180,10 @@ execute <- function(order, at, broker) {
 	order@status <- ClosedStatus()
 	statusTime(order) <- index(at)
 	updateOrder(order, broker)
+}
+
+updateOrder <- function(order, broker) {
+	callUpdateProcedure(order@status, order, broker)
 }
 
 
@@ -238,6 +237,18 @@ setMethod("notify",
 			execute(order, at = Op(price.bar), broker)
 		})
 
+setMethod("mergeOrders",
+		signature(existing.order = "MarketOrder", new.order = "MarketOrder"),
+		function(existing.order, new.order) {
+			quantity <- quantity(existing.order) + quantity(new.order)
+			if (quantity > 0) {
+				order <- Order(instrumentOf(existing.order), buy = quantity)
+			} else {
+				order <- Order(instrumentOf(existing.order), sell = quantity)
+			}
+			return(order)
+		})
+
 
 #' Limit Order
 #' 
@@ -289,10 +300,10 @@ limit_price <- function(limit.order) {
 setMethod("notify",
 		signature(order = "BuyLimitOrder"),
 		function(order, broker, price.bar) {
-			if (Op(price.bar) < limit_price(order)) {
+			if (as.numeric(Op(price.bar)) < as.numeric(limit_price(order))) {
 				execute(order, at = Op(price.bar), broker)
 			} else {
-				if (Lo(price.bar) < limit_price(order)) {
+				if (as.numeric(Lo(price.bar)) < as.numeric(limit_price(order))) {
 					execute(order, at = limit_price(order), broker)
 				}
 			}
@@ -301,14 +312,34 @@ setMethod("notify",
 setMethod("notify",
 		signature(order = "SellLimitOrder"),
 		function(order, broker, price.bar) {
-			if (Op(price.bar) > limit_price(order)) {
+			if (as.numeric(Op(price.bar)) > as.numeric(limit_price(order))) {
 				execute(order, at = Op(price.bar), broker)
 			} else {
-				if (Hi(price.bar) > limit_price(order)) {
+				if (as.numeric(Hi(price.bar)) > as.numeric(limit_price(order))) {
 					execute(order, at = limit_price(order), broker)
 				}
 			}
 		})
+
+setMethod("areSimilar",
+		signature(order1 = "LimitOrder", order2 = "LimitOrder"),
+		function(order1, order2) {
+			limit.dist1 <- inherits(order1, "LimitOrder", which = TRUE)
+			limit.dist2 <- inherits(order2, "LimitOrder", which = TRUE)
+			
+			same.type <- limit.dist1 == limit.dist2
+			same.limit <- limit_price(order1) == limit_price(order2)
+			
+			return(same.type && same.limit)
+		})
+
+setMethod("mergeOrders",
+		signature(existing.order = "LimitOrder", new.order = "LimitOrder"),
+		function(existing.order, new.order) {
+			stop("merge for Limit orders not defined")
+		})
+
+
 
 #' Stop Loss Order
 #' 
@@ -353,10 +384,10 @@ Stop <- function(instrument, buy = NULL, sell = NULL, at) {
 setMethod("notify",
 		signature(order = "BuyStopLoss"),
 		function(order, broker, price.bar) {
-			if (Op(price.bar) > limit_price(order)) {
+			if (as.numeric(Op(price.bar)) > as.numeric(limit_price(order))) {
 				execute(order, at = Op(price.bar), broker)
 			} else {
-				if (Hi(price.bar) > limit_price(order)) {
+				if (as.numeric(Hi(price.bar)) > as.numeric(limit_price(order))) {
 					execute(order, at = limit_price(order), broker)
 				}
 			}
@@ -365,14 +396,140 @@ setMethod("notify",
 setMethod("notify",
 		signature(order = "SellStopLoss"),
 		function(order, broker, price.bar) {
-			if (Op(price.bar) < limit_price(order)) {
+			if (as.numeric(Op(price.bar)) < as.numeric(limit_price(order))) {
 				execute(order, at = Op(price.bar), broker)
 			} else {
-				if (Lo(price.bar) < limit_price(order)) {
+				if (as.numeric(Lo(price.bar)) < as.numeric(limit_price(order))) {
 					execute(order, at = limit_price(order), broker)
 				}
 			}
 		})
+
+setMethod("mergeOrders",
+		signature(existing.order = "StopLossOrder", new.order = "StopLossOrder"),
+		function(existing.order, new.order) {
+			quantity <- quantity(existing.order) + quantity(new.order)
+			limit <- limit_price(existing.order)
+			if (quantity > 0) {
+				order <- Stop(instrumentOf(existing.order), buy = quantity, at = limit)
+			} else {
+				order <- Stop(instrumentOf(existing.order), sell = quantity, at = limit)
+			}
+			return(order)
+		})
+
+
+
+#' Combination order - Market with Stop loss
+#' 
+setClass("MarketWithStop",
+		representation(
+				stop.point = "numeric"				
+		), 
+		contains = "MarketOrder")
+
+setClass("LongMarketWithStop",
+		contains = "MarketWithStop")
+
+setClass("ShortMarketWithStop",
+		contains = "MarketWithStop")
+		
+MarketWithStop <- function(instrument, buy = NULL, sell = NULL, stop.point) {
+	
+	check_order_parameters(instrumnet, buy, sell)
+	if (missing(stop.point)) {
+		stop("Stop point must be supplied")
+	}
+	if (is.null(buy)) {
+		order <- new("ShortMarketWithStop", 
+				instrument = instrument, 
+				status = OpenStatus(),
+				quantity = -abs(as.integer(sell)),
+				execution.price = xts(), 
+				stop.point = abs(stop.point), 
+				submission.time = initDate(), 
+				status.time = initDate())
+	} else {
+		order <- new("LongMarketWithStop", 
+				instrument = instrument, 
+				status = OpenStatus(),
+				quantity = abs(as.integer(buy)),
+				execution.price = xts(),
+				stop.point = abs(stop.point), 
+				submission.time = initDate(), 
+				status.time = initDate())
+	}
+}
+
+setMethod("notify",
+		signature(order = "LongMarketWithStop"),
+		function(order, broker, price.bar) {
+			notify(asMarketOrder(order), broker, price.bar)
+			stop.price <- Op(price.bar) * (1 - order@stop.point)
+			addOrder(broker, 
+					Stop(instrumentOf(order), sell = quantity(order), at = stop.price))
+		})
+
+setGeneric("asMarketOrder",
+		function(order) {
+			standardGeneric("asMarketOrder")
+		})
+
+setMethod("asMarketOrder",
+		signature(order = "LongMarketWithStop"),
+		function(order) {
+			market.order <- Order(instrumentOf(order), buy = quantity(order))
+			market.order <- setID(market.order, getID(order))
+			market.order <- setTxnCostModel(market.order, order@txn.cost.model)
+			submissionTime(market.order) <- submissionTime(order)
+			return(market.order)
+		})
+
+setMethod("asMarketOrder",
+		signature(order = "ShortMarketWithStop"),
+		function(order) {
+			market.order <- Order(instrumentOf(order), sell = quantity(order))
+			market.order <- setID(market.order, getID(order))
+			market.order <- setTxnCostModel(market.order, order@txn.cost.model)
+			submissionTime(market.order) <- submissionTime(order)
+			return(order)
+		})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

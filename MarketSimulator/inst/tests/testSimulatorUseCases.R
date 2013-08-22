@@ -37,7 +37,7 @@ context("Order execution")
 				AMP.bar[, "AMP.AX.High"] <- 10.15
 				AMP.bar[, "AMP.AX.Low"] <- 9.85
 				AMP.bar[, "AMP.AX.Close"] <- 10.1
-				timstamp <- index(AMP.bar)
+				timestamp <- index(AMP.bar)
 				
 				market <- Mock("Market")
 				mockMethod(market, "tradeableInstruments", "AMP.AX")
@@ -63,7 +63,7 @@ context("Order execution")
 				AMP.bar[, "AMP.AX.High"] <- 10.15
 				AMP.bar[, "AMP.AX.Low"] <- 10.0
 				AMP.bar[, "AMP.AX.Close"] <- 10.1
-				timstamp <- index(AMP.bar)
+				timestamp <- index(AMP.bar)
 				
 				market <- Mock("Market")
 				mockMethod(market, "tradeableInstruments", "AMP.AX")
@@ -84,7 +84,38 @@ context("Order execution")
 			})
 	
 	
-	
+context("Price sequences")
+
+	test_that("Market order executed and position stopped out next day", {
+				
+				OHLC <- paste("AMP.AX", 
+						c("Open", "High", "Low", "Close", "Volume", "Adjusted"), 
+						sep = ".")
+				day1 <- c(10, 10.2, 9.9, 10, 1000, 0)
+				names(day1) <- OHLC
+				day2 <- c(9.9, 10.0, 9.5, 9.6, 1000, 0)
+				names(day2) <- OHLC
+				day1 <- xts(t(day1), order.by = as.Date("2007-01-01"))
+				days <- rbind(day1, xts(t(day2), order.by = as.Date("2007-01-02")))
+				
+				broker <- Broker()
+				broker <- addMarket(broker, Market(list("AMP.AX" = days)))
+				
+				strategy <- Mock("Strategy")
+				mockMethod(strategy, "targetPositions", list(Target("AMP.AX", 1, 0.02)))
+				
+				manager <- Manager(strategy)
+				manager <- setupAccount(manager, 10000)
+				manager <- setPosition(manager, Position("AMP.AX"))
+				
+				order <- MarketWithStop("AMP.AX", buy = 1000, stop.point = 0.02)
+				addOrder(broker, order)
+				
+				BackTest(manager, broker, as.Date("2007-01-01"), as.Date("2007-01-02"))
+				
+				expect_that(length(openOrders(broker, "AMP.AX")), matchesObject(0))
+				expect_that(length(closedOrders(broker, "AMP.AX")), matchesObject(2))
+			})
 	
 	
 	

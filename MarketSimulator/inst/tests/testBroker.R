@@ -60,7 +60,7 @@ context("Order handling")
 				expect_that(addOrder(broker, list()), throws_error())
 			})
 	
-	test_that("Broker assigns orderID to order when added", {
+	test_that("Broker assigns unique orderID to order when added", {
 				
 				broker <- Broker()
 				order1 <- Order("AMP", buy = 100)
@@ -69,8 +69,10 @@ context("Order handling")
 				addOrder(broker, order2)
 				orders <- openOrders(broker, "AMP")
 				
-				expect_that(getID(orders[[1]]), equals(1))
-				expect_that(getID(orders[[2]]), equals(2))
+				expect_that(getID(orders[[1]]), equals("o1"))
+				expect_that(getID(orders[[2]]), equals("o2"))
+				expect_that(names(orders), matchesObject(c("o1", "o2")))
+				expect_that(nextID(broker), matchesObject("o3"))
 			})
 	
 	test_that("Broker assigns submission date when order added", {
@@ -106,9 +108,9 @@ context("Order handling")
 				addOrder(broker, order1)
 				addOrder(broker, order2)
 				
-				order1 <- setID(order1, 1L)
+				order1 <- setID(order1, "o1")
 				order1 <- setTxnCostModel(order1, default_cost_model)
-				order2 <- setID(order2, 2L)
+				order2 <- setID(order2, "o2")
 				order2 <- setTxnCostModel(order2, default_cost_model)
 				
 				expect_that(openOrders(broker, "AMP"), 
@@ -122,7 +124,7 @@ context("Order handling")
 				addOrder(broker, order)
 				order@status <- ClosedStatus()
 				order@execution.price <- xts(10, order.by = as.Date("2010-04-20"))
-				order <- setID(order, 1L)
+				order <- setID(order, "o1")
 				order <- setTxnCostModel(order, default_cost_model)
 				updateOrder(order, broker)
 				
@@ -157,7 +159,7 @@ context("Order handling")
 				addOrder(broker, Order("BHP", sell = 100))
 				
 				expected.order <- Order("AMP", buy = 200)
-				expected.order <- setID(expected.order, 1L)
+				expected.order <- setID(expected.order, "o1")
 				expected.order <- setTxnCostModel(expected.order, broker@cost.model)
 				
 				amp.orders <- openOrders(broker, "AMP")
@@ -192,6 +194,8 @@ context("Notifications of market activity")
 				mockMethod(list(order1, order2), "notify", order1)
 				mockMethod(list(order1, order2), "instrumentOf", "AMP")
 				mockMethod(list(order1, order2), "submissionTime", initDate())
+				mockMethod(order1, "getID", "o1")
+				mockMethod(order2, "getID", "o2")
 				
 				addOrderToBook(broker, order1, order.book = "open.orders")
 				addOrderToBook(broker, order2, order.book = "open.orders")
@@ -238,8 +242,41 @@ context("Notifications of market activity")
 				expect_that(latestPrices(broker), 
 						matchesObject(latest.prices, ignore.attributes = FALSE))
 			})
+	
+	test_that("New Orders added during open are also notified", {
+				
+				broker <- Broker()
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				# Op 10.18, Hi 10.2, Lo 10.09, Cl 10.09: "2007-01-02" 
+				market <- Mock("Market")
+				mockMethod(market, "tradeableInstruments", "AMP")
+				mockMethod(market, "getBar", price.bar)
+				broker <- addMarket(broker, market)
+				
+				suppressWarnings(setClass("TestConditionalOrder", contains = "Order"))
+				setMethod("notify",
+						signature("TestConditionalOrder"),
+						function(order, broker, price.bar) {
+							execute(order, at = Op(price.bar), broker)
+							addOrder(broker, Stop("AMP", sell = 100, at = Op(price.bar)))
+						})
+				# Note that Stop added during notify above will trigger on next notify
+				# as Lo of price.bar is lower than 'at'.
+				
+				order <- new("TestConditionalOrder")
+				order@instrument <- "AMP"
+				quantity(order) <- 100
+				addOrder(broker, order)
+				
+				marketActivity(broker, index(price.bar))
+				
+				expect_that(length(closedOrders(broker, "AMP")), matchesObject(2))
+				expect_that(length(openOrders(broker, "AMP")), matchesObject(0))
+			})
 
 context("Order book storage")
+
+				cleanMockMethods()
 
 	test_that("Order removed from open orders", {
 				
@@ -249,8 +286,8 @@ context("Order book storage")
 				addOrder(broker, amp.order)
 				bhp.order <- Order("BHP", buy = 100)
 				addOrder(broker, bhp.order)
-				amp.order <- setID(amp.order, 1L)
-				bhp.order <- setID(bhp.order, 1L)
+				amp.order <- setID(amp.order, "o1")
+				bhp.order <- setID(bhp.order, "o2")
 				bhp.order <- setTxnCostModel(bhp.order, default_cost_model)
 				
 				removeFromOpenOrders(broker, amp.order)
@@ -266,7 +303,7 @@ context("Order book storage")
 				broker <- Broker()
 				addOrder(broker, order)
 				
-				order <- setID(order, 1L)
+				order <- setID(order, "o1")
 				order@status <- ClosedStatus()
 				order@execution.price <- xts(10, order.by = as.Date("2010-04-20"))
 				order <- setTxnCostModel(order, default_cost_model)
@@ -303,26 +340,21 @@ context("Order book storage")
 	
 context("Transaction records")
 
+				cleanMockMethods()
+
 	test_that("Broker stores transaction record for closed order", {
 				
-				cleanMockMethods()
-				amp.transaction <- data.frame(
-						size = 50, price = 0.8, costs = 6, row.names = "AMP")
-				bhp.transaction <- data.frame(
-						size = 100, price = 0.5, costs = 6, row.names = "BHP")
-				transactions <- rbind(amp.transaction, bhp.transaction)
-				
-				amp.order <- Mock("MarketOrder")
+				amp.order <- new("MarketOrder")
 				amp.order@status <- ClosedStatus()
 				amp.order@instrument <- "AMP"
-				amp.order <- setID(amp.order, 1L)
-				mockMethod(amp.order, "writeTransaction", amp.transaction)
+				amp.order <- setID(amp.order, "o1")
 				
-				bhp.order <- Mock("MarketOrder")
+				bhp.order <- new("MarketOrder")
 				bhp.order@status <- ClosedStatus()
 				bhp.order@instrument <- "BHP"
-				bhp.order <- setID(bhp.order, 2L)
-				mockMethod(bhp.order, "writeTransaction", bhp.transaction)
+				bhp.order <- setID(bhp.order, "o2")
+				
+				transactions <- list(amp.order, bhp.order)
 				
 				broker <- Broker()
 				addOrder(broker, amp.order)
@@ -331,7 +363,7 @@ context("Transaction records")
 				updateOrder(amp.order, broker)
 				updateOrder(bhp.order, broker)
 				
-				expect_that(transactions(broker), matchesObject(transactions))
+				expect_that(getTransactions(broker), matchesObject(transactions))
 			})
 	
 	test_that("Broker clears transactions", {
@@ -346,7 +378,7 @@ context("Transaction records")
 				
 				clearTransactions(broker)
 				
-				expect_that(transactions(broker), matchesObject(data.frame()))
+				expect_that(getTransactions(broker), matchesObject(data.frame()))
 			})
 	
 context("Order book output")
@@ -358,7 +390,8 @@ context("Order book output")
 				order <- Order("AMP", buy = 100)
 				order@status <- ClosedStatus()
 				order@execution.price <- xts(10.0, order.by = as.Date("2010-02-04"))
-				order@txn.cost.model <- default_cost_model
+				order <- setTxnCostModel(order, default_cost_model)
+				order <- setID(order, "o1")
 				
 				addOrderToBook(broker, order, "closed.orders")
 				
@@ -397,8 +430,9 @@ context("Order book output")
 				instrument <- "AMP"
 				order <- Order(instrument, buy = 100)
 				order@status <- ClosedStatus()
+				order <- setID(order, "o1")
 				order@execution.price <- xts(10.0, order.by = as.Date("2010-02-04"))
-				order@txn.cost.model <- default_cost_model
+				order <- setTxnCostModel(order, default_cost_model)
 				
 				addOrderToBook(broker, order, "closed.orders")
 				

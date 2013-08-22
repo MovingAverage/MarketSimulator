@@ -122,10 +122,10 @@ context("Merging orders")
 						throws_error("Instruments differ between orders"))
 			})
 	
-	test_that("Market orders merged into one", {
+	test_that("Two buy Market orders merged into one", {
 				
 				existing.order <- Order("AMP", buy = 10)
-				existing.order <- setID(existing.order, 1L)
+				existing.order <- setID(existing.order, "o1")
 				
 				new.order1 <- Order("AMP", buy = 10)
 				expected.order1 <- Order("AMP", buy = 20)
@@ -141,6 +141,28 @@ context("Merging orders")
 						matchesObject(expected.order2))
 				
 			})
+	
+	test_that("Stop orders are not merged unless same trigger price", {
+				
+				amp <- loadStocks("AMP.AX")[[1]][2]
+				
+				stop1 <- Stop("AMP", sell = 1000, at = Op(amp) * 0.98)
+				stop2 <- Stop("AMP", sell = 500, at = Op(amp) * 0.98)
+				stop3 <- Stop("AMP", buy = 700, at = Op(amp) * 0.98)
+				stop4 <- Stop("AMP", buy = 700, at = Op(amp) * 0.95)
+				
+				expected.merge12 <- Stop("AMP", sell = 1500, at = Op(amp) * 0.98)
+				expected.merge13 <- Stop("AMP", sell = 300, at = Op(amp) * 0.98)
+				
+				expect_that(areSimilar(stop1, stop2), is_true())
+				expect_that(areSimilar(stop1, stop3), is_true())
+				expect_that(areSimilar(stop2, stop3), is_true())
+				expect_that(areSimilar(stop1, stop4), is_false())
+				expect_that(mergeOrders(stop1, stop2), matchesObject(expected.merge12))
+				expect_that(mergeOrders(stop1, stop3), matchesObject(expected.merge13))
+			})
+	
+	
 	
 context("Market order on open processing")
 	
@@ -187,6 +209,7 @@ context("Market order on open processing")
 				missing.open[, "AMP.AX.Open"] <- NA
 				zero.volume[, "AMP.AX.Volume"] <- 0
 				zero.open[, "AMP.AX.Open"] <- 0
+				weekend.day <- AMP["2007-01-06"]
 				
 				broker <- Broker()
 				order <- Order("AMP.AX", buy = 100)
@@ -196,6 +219,7 @@ context("Market order on open processing")
 				notify(order, broker, missing.open)
 				notify(order, broker, zero.volume)
 				notify(order, broker, zero.open)
+				notify(order, broker, weekend.day)
 				
 				order <- openOrders(broker, "AMP.AX")[[1]]
 				
@@ -203,6 +227,7 @@ context("Market order on open processing")
 				expect_that(active_market(missing.open), is_false())
 				expect_that(active_market(zero.volume), is_false())
 				expect_that(active_market(zero.open), is_false())
+				expect_that(active_market(weekend.day), is_false())
 				expect_that(status(order), equals("open"))
 			})
 
@@ -223,7 +248,7 @@ context("Stop loss order processing")
 				price.bar[, "AMP.AX.Volume"] <- 0
 				
 				order <- Stop("AMP", buy = 100, at = Op(price.bar))
-				order <- setID(order, 1L)
+				order <- setID(order, "o1")
 				broker <- Broker()
 				addOrder(broker, order)
 				notify(order, broker, price.bar)
@@ -301,6 +326,25 @@ context("Stop loss order processing")
 				
 				expect_that(broker, called_once_with("closeOrder", expected.order))
 			})
+	
+	test_that("Sell Stop Loss executes on day after submitted", {
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "closeOrder")
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				
+				at.price <- xts(as.numeric(Op(price.bar) + 0.01), index(price.bar) - 1)
+				stop.order <- Stop("AMP.AX", sell = 100, at = at.price)
+				expected.order <- stop.order
+				expected.order@status <- ClosedStatus()
+				expected.order@execution.price <- Op(price.bar)
+				submissionTime(expected.order) <- initDate()
+				statusTime(expected.order) <- index(price.bar)
+				
+				notify(stop.order, broker, price.bar)
+				
+				expect_that(broker, called_once_with("closeOrder", expected.order))
+			})
 
 	
 context("Limit order processing")
@@ -320,7 +364,7 @@ context("Limit order processing")
 				price.bar[, "AMP.AX.Volume"] <- 0
 				
 				order <- Limit("AMP", buy = 100, at = Op(price.bar))
-				order <- setID(order, 1L)
+				order <- setID(order, "o1")
 				broker <- Broker()
 				addOrder(broker, order)
 				notify(order, broker, price.bar)
@@ -360,7 +404,7 @@ context("Limit order processing")
 				broker <- Broker()
 				addOrder(broker, order)
 				
-				order <- setID(order, 1L)
+				order <- setID(order, "o1")
 				order <- setTxnCostModel(order, default_cost_model)
 				
 				notify(order, broker, price.bar)
@@ -381,7 +425,7 @@ context("Limit order processing")
 				broker <- Broker()
 				addOrder(broker, order)
 				
-				order <- setID(order, 1L)
+				order <- setID(order, "o1")
 				order <- setTxnCostModel(order, default_cost_model)
 				
 				notify(order, broker, price.bar)
@@ -401,7 +445,7 @@ context("Limit order processing")
 				broker <- Broker()
 				addOrder(broker, order)
 				
-				order <- setID(order, 1L)
+				order <- setID(order, "o1")
 				order <- setTxnCostModel(order, default_cost_model)
 				
 				notify(order, broker, price.bar)
@@ -409,6 +453,43 @@ context("Limit order processing")
 				
 				expect_that(status(order), matchesObject("closed"))
 				expect_that(execution_price(order), equals(Op(price.bar)))
+			})
+	
+	
+context("Market with Stop processing")
+
+				cleanMockMethods()
+
+	test_that("Market with Stop sends stop when Market executed", {
+				
+				stop.loss <- 0.02
+				order <- MarketWithStop("AMP", buy = 100, stop.point = stop.loss)
+				order <- setID(order, "o1")
+				price.bar <- loadStocks("AMP.AX")[[1]][2]
+				
+				broker <- Broker()
+				setTodaysDate(broker, index(price.bar))
+				addOrder(broker, order)
+				
+				expected.market <- Order("AMP", buy = 100)
+				expected.market@execution.price <- Op(price.bar)
+				expected.market <- setID(expected.market, "o1")
+				expected.market@status <- ClosedStatus()
+				statusTime(expected.market) <- as.POSIXct(index(price.bar))
+				
+				expected.stop <- Stop("AMP", sell = 100, 
+						at = Op(price.bar) * (1 - stop.loss))
+				expected.stop <- setID(expected.stop, "o2")
+				expected.stop <- setTxnCostModel(expected.stop, broker@cost.model) 
+				submissionTime(expected.stop) <- as.POSIXct(index(price.bar))
+				
+				
+				notify(order, broker, price.bar)
+				
+				expect_that(closedOrders(broker, "AMP")[[1]], 
+						matchesObject(expected.market))
+				expect_that(openOrders(broker, "AMP")[[1]], matchesObject(expected.stop))
+				expect_that(length(openOrders(broker, "AMP")), equals(1))
 			})
 	
 	

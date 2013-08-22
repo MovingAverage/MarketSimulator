@@ -5,7 +5,9 @@ setClass("Manager",
 			strategy = "ANY", 
 			cost.model = "function", 
 			cost.threshold = "numeric", 
-			positions = "Positions"
+			positions = "list", 
+			latest.prices = "numeric", 
+			account = "Account"
 		))
 		
 Manager <- function(strategy) {
@@ -24,9 +26,74 @@ setMethod("targetPositions",
 			targetPositions(object@strategy, timestamp)
 		})
 
-isViable <- function(manager, positions, target) {
-	positions <- addTarget(positions, target)
-	value <- transactionValue(positions, instrumentOf(target))
+setupAccount <- function(manager, starting.equity) {
+	manager@account <- Account(starting.equity)
+	return(manager)
+}
+
+setMethod("updateAccount",
+		signature("Manager"),
+		function(object, transactions) {
+			object@account <- updateAccount(object@account, transactions)
+			return(object)
+		})
+
+currentEquity <- function(manager) {
+	cash <- cashIn(manager@account)
+	position.list <- positions(manager)
+	names(position.list) <- NULL
+	values <- sapply(position.list, heldValue, 
+			latest.prices = latestPrices(manager))
+	return(cash + sum(values))
+}
+
+positions <- function(manager) {
+	manager@positions
+}
+
+"positions<-" <- function(manager, value) {
+	manager@positions <- value
+	return(manager)
+}
+
+getPosition <- function(manager, instrument) {
+	return(manager@positions[[instrument]])
+}
+
+setPosition <- function(manager, position) {
+	manager@positions[instrumentOf(position)] <- position
+	return(manager)
+}
+
+setMethod("activeInstruments",
+		signature("Manager"),
+		function(object) {
+			sapply(object@positions, instrumentOf)
+		})
+
+addTarget <- function(manager, target) {
+	position <- getPosition(manager, instrumentOf(target))
+	if (is.null(position)) {
+		position <- Position(instrumentOf(target))
+	}
+	position <- setTarget(position, target)
+	manager <- setPosition(manager, position)
+	return(manager)
+}
+
+setMethod("latestPrices",
+		signature("Manager"),
+		function(object) {
+			object@latest.prices
+		})
+
+"latestPrices<-" <- function(positions, value) {
+	positions@latest.prices <- value
+	return(positions)
+}
+
+isViable <- function(manager, position) {
+	value <- transactionValue(position, manager)
 	cost <- tradeCost(manager, value)
 	(cost / abs(value)) < manager@cost.threshold
 }
@@ -36,38 +103,34 @@ tradeCost <- function(manager, value) {
 }
 
 placeOrders <- function(manager, broker, timestamp) {
-	
-	targets <- targetPositions(manager, timestamp)
-	positions <- manager@positions
-	
-	for (target in targets) {
-		if (isViable(manager, positions, target)) {
-			positions <- addTarget(positions, target)
-			positions <- fireOrder(positions, broker, instrumentOf(target))
+	for (target in targetPositions(manager, timestamp)) {
+		manager <- addTarget(manager, target)
+	}
+	for (position in positions(manager)) {
+		if (isViable(manager, position)) {
+			size <- transactionSize(position, manager)
+			position <- sendOrders(position, size, broker)
+			manager <- setPosition(manager, position)
 		}
 	}
-	manager@positions <- positions
 	return(manager)
 }
 
-updatePositions <- function(manager, broker) {
-	transactions <- transactions(broker)
+updateRecords <- function(manager, broker) {
+	transactions <- getTransactions(broker)
 	clearTransactions(broker)
+	latestPrices(manager) <- latestPrices(broker)
 	manager <- updateAccount(manager, transactions)
-	positions <- manager@positions
-	latestPrices(positions) <- latestPrices(broker)
-	for (instrument in activeInstruments(positions)) {
-		position <- getPosition(positions, instrument)
+	for (position in positions(manager)) {
 		position <- updateSize(position, transactions)
 		position <- updateOrders(position, broker)
-		positions <- setPosition(positions, position)
+		manager <- setPosition(manager, position)
 	}
-	manager@positions <- positions
 	return(manager)
 }
 
 sendNotices <- function(manager, timestamp) {
-	notices <- notices(manager@positions)
+	notices <- notices(manager)
 	if (nchar(notices) > 0) {
 		message(paste0(timestamp, ": ", notices))
 	}
@@ -75,28 +138,18 @@ sendNotices <- function(manager, timestamp) {
 	return(manager)
 }
 
+notices <- function(manager) {
+	position.list <- manager@positions
+	notices <- lapply(position.list, notice)
+	return(paste(notices[sapply(notices, length) != 0], collapse = ", "))
+}
+
 setMethod("clearNotices",
 		signature("Manager"),
 		function(object) {
-			object@positions <- clearNotices(object@positions)
+			object@positions <- lapply(object@positions, clearNotices)
 			return(object)
 		})
-
-setupAccount <- function(manager, starting.equity) {
-	manager@positions <- PositionSet(Account(starting.equity), numeric())
-	return(manager)
-}
-
-setMethod("updateAccount",
-		signature("Manager"),
-		function(object, transactions) {
-			object@positions <- updateAccount(object@positions, transactions)
-			return(object)
-		})
-
-
-
-
 
 
 

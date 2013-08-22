@@ -27,6 +27,6 @@ Collate:
     'TargetPosition.R'
     'Position.R'
     'Manager.R'
-    'Strategy.R'
+	'Strategy.R'
     'BackTest.R'
 
