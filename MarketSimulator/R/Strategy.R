@@ -16,8 +16,8 @@ strategySetup <- function(strategy, market) {
 	for (instrument in strategy@instruments) {
 		mktdata <- market@instruments[[instrument]]
 		ema3 <- strategy@indicator(Cl(mktdata), n = 3)
-		ema5 <- strategy@indicator(Cl(mktdata), n = 5)
-		signals <- merge(signals, ema3 < ema5)
+		ema10 <- strategy@indicator(Cl(mktdata), n = 10)
+		signals <- merge(signals, ema3 < ema10)
 	}
 	names(signals) <- strategy@instruments
 	strategy@signals <- signals
@@ -41,7 +41,7 @@ setMethod("targetPositions",
 				size <- as.numeric(positions[instrument])
 				if (is.na(size)) size <- 0
 				if (size > 0) {
-					targets[instrument] <- Target(instrument, size, stop.point = 0.02)
+					targets[instrument] <- Target(instrument, size, stop.point = 0.01)
 				} else {
 					targets[instrument] <- Target(instrument, size)
 				}

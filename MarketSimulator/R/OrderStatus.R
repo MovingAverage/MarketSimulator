@@ -7,10 +7,6 @@ setGeneric("callUpdateProcedure",
 			standardGeneric("callUpdateProcedure")
 		})
 
-setGeneric("status",
-		function(object) {
-			standardGeneric("status")
-		})
 
 #'
 setClass("OpenStatus",

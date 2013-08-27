@@ -103,7 +103,10 @@ cancelOrder <- function(broker, order) {
 
 replaceOrder <- function(broker, order) {
 	order.list <- openOrders(broker, instrumentOf(order))
+	statusTime(order) <- today(broker)
+	order.list[[getID(order)]] <- NULL
 	order.list[[getID(order)]] <- order
+	# Note this is so that order is replaced at end of open orders.
 	assign(instrumentOf(order), order.list, broker@open.orders)
 }
 

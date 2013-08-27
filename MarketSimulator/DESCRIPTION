@@ -25,6 +25,7 @@ Collate:
     'Broker.R'
     'Account.R'
     'TargetPosition.R'
+    'PositionStatus.R'
     'Position.R'
     'Manager.R'
 	'Strategy.R'

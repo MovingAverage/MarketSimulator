@@ -4,7 +4,8 @@ setClass("TargetPosition",
 		representation(
 				instrument = "character", 
 				size = "numeric", 
-				stop.point = "numeric"
+				stop.point = "numeric", 
+				quantity = "integer"
 		))
 
 Target <- function(instrument, size, stop.point = numeric()) {
@@ -16,14 +17,8 @@ Target <- function(instrument, size, stop.point = numeric()) {
 	return(target)
 }
 
-sizeOf <- function(position) {
-	size <- position@size
-	names(size) <- instrumentOf(position)
-	return(size)
-}
-
 makeOrder <- function(target, size) {
-	if (length(target@stop.point) == 0) {
+	if (length(target@stop.point) == 0 || size != quantity(target)) {
 		if (size > 0) {
 			order <- Order(instrumentOf(target), buy = size)
 		} else {

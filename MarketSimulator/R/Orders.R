@@ -23,19 +23,17 @@ getID <- function(order) {
 }
 
 setMethod("status",
-		signature(object = "Order"),
+		signature("Order"),
 		function(object) {
 			status(object@status)
 		})
 
-quantity <- function(order) {
-	return(order@quantity)
-}
-
-"quantity<-" <- function(order, value) {
-	order@quantity <- as.integer(value)
-	return(order)
-}
+setMethod("status<-",
+		signature("Order"),
+		function(object, value) {
+			object@status <- value
+			return(object)
+		})
 
 execution_price <- function(order) {
 	return(order@execution.price)
@@ -178,7 +176,7 @@ not_NA_or_Zero <- function(value) {
 execute <- function(order, at, broker) {
 	order@execution.price <- at
 	order@status <- ClosedStatus()
-	statusTime(order) <- index(at)
+	statusTime(order) <- today(broker)
 	updateOrder(order, broker)
 }
 

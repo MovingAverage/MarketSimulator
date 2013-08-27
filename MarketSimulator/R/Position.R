@@ -3,7 +3,7 @@
 setClass("CurrentPosition",
 		representation(
 			instrument = "character",
-			status = "character", 
+			state = "PositionState", 
 			orders = "list", 
 			size = "numeric", 
 			target = "TargetPosition", 
@@ -23,7 +23,7 @@ Position <- function(instrument, orders = list(), size = 0) {
 		}
 	}
 	position@target <- Target(instrument, size = 0)
-	position@status <- Open()
+	position@state <- Open()
 	position@orders <- orders
 	position@size <- size
 	return(position)
@@ -35,29 +35,57 @@ list_objects_inherit_from <- function(parent.class, list) {
 
 setTarget <- function(position, target) {
 	
-	old.target <- position@target
+	old.target <- getTarget(position)
 	position@target <- target
 	
-	if (sizeOf(old.target) == 0 && sizeOf(target) != 0) {
-		position@status <- Open()
+	if (!identical(sizeOf(old.target), sizeOf(target))) {
+		if (sizeOf(old.target) != 0) {
+			if (sizeOf(target) == 0) {
+				status(position) <- Closed()
+			} else {
+				if (!identical(status(position), Stopped())) {
+					status(position) <- Adjusting()
+				}
+			}
+		} else {
+			if (sizeOf(target) != 0) {
+				status(position) <- Open()
+			}
+		}
 	}
 	
 	return(position)
 }
 
-totalSize <- function(object) {
-			order.size <- orderSize(object)
-			held.size <- heldSize(object)
-			return(order.size + held.size)
-		}
+getTarget <- function(position) {
+	position@target
+}
 
-heldSize <- function(position) {
-	size <- position@size
-	if (is.na(size)) {
-		size <- 0
-	}
-	names(size) <- instrumentOf(position)
-	return(size)
+setMethod("status",
+		signature("CurrentPosition"),
+		function(object) {
+			return(object@state)
+		})
+
+setMethod("status<-",
+		signature("CurrentPosition"),
+		function(object, value) {
+			object@state <- value
+			return(object)
+		})
+
+ordersFor <- function(position) {
+	position@orders
+}
+
+heldValue <- function(position, latest.prices) {
+	sizeOf(position) * latest.prices[instrumentOf(position)]
+}
+
+totalSize <- function(position) {
+	order.size <- orderSize(position)
+	held.size <- sizeOf(position)
+	return(order.size + held.size)
 }
 
 orderSize <- function(position) {
@@ -72,8 +100,8 @@ orderSize <- function(position) {
 
 size_orders <- function(position) {
 	
-	size.orders <- !sapply(position@orders, inherits, what = "StopLossOrder")
-	size.orders <- position@orders[size.orders]
+	size.orders <- !sapply(ordersFor(position), inherits, what = "StopLossOrder")
+	size.orders <- ordersFor(position)[size.orders]
 	if (length(size.orders) > 1) {
 		stop("More than one market order found for instrument")
 	}
@@ -91,75 +119,37 @@ updateOrders <- function(position, broker) {
 
 updateSize <- function(position, transactions) {
 	
+	transaction.instruments <- vapply(transactions, instrumentOf, character(1))
+	relevant.transactions <- transaction.instruments == instrumentOf(position)
+	transactions <- transactions[relevant.transactions]
 	for (transaction in transactions) {
-		if (instrumentOf(position) == instrumentOf(transaction)) {
-			new.size <- heldSize(position) + quantity(transaction)
-			position@size <- new.size
-			if (new.size == 0 & inherits(transaction, "StopLossOrder")) {
-				position@status <- Stopped()
-				message(paste("Stopped:", instrumentOf(transaction)))
-			}
+		new.size <- sizeOf(position) + quantity(transaction)
+		position@size <- new.size
+		if (new.size == 0 & inherits(transaction, "StopLossOrder")) {
+			status(position) <- Stopped()
+			message(paste(statusTime(transaction), ": Stopped:", 
+							instrumentOf(transaction)))
 		}
 	}
 	return(position)
 }
 
 targetSize <- function(position) {
-	size <- sizeOf(position@target)
-	if (is.na(size)) {
-		size <- 0
-		names(size) <- instrumentOf(position)
-	}
-	return(size)
+	return(sizeOf(getTarget(position)))
 }
 
-heldValue <- function(position, latest.prices) {
-	heldSize(position) * latest.prices[instrumentOf(position)]
-}
-
-heldFraction <- function(position, latest.prices, equity) {
-	heldValue(position, latest.prices) / equity
+targetQuantity <- function(position) {
+	return(quantity(getTarget(position)))
 }
 
 transactionValue <- function(position, manager) {
-	equity <- currentEquity(manager)
-	held.fraction <- heldFraction(position, latestPrices(manager), equity)
-	change <- targetSize(position) - held.fraction
-	return(equity * change)
+	size <- transactionSize(position)
+	price <- latestPrices(manager)[instrumentOf(position)]
+	return(size * price)
 }
 
-transactionSize <- function(position, manager) {
-	size <- transactionValue(position, manager) / 
-			latestPrices(manager)[instrumentOf(position)]
-	size <- as.integer(size)
-	names(size) <- instrumentOf(position)
-	return(size)
-}
-
-sendOrders <- function(position, size, broker) {
-	
-	if (status(position)!= Stopped()) {
-		if (orderSize(position) == 0) {
-			
-			if (targetSize(position) == 0) {
-				for (order in position@orders) {
-					order@status <- NullStatus()
-					updateOrder(order, broker)
-				}
-			}
-			
-			order <- makeOrder(position@target, size)
-			addOrder(broker, order)
-			position <- addNotice(position, size)
-		} else {
-			order <- position@orders[[1]]
-			if (quantity(order) != as.integer(size)) {
-				quantity(order) <- size
-				updateOrder(order, broker)
-			}
-		}
-	}
-	return(position)
+transactionSize <- function(position) {
+	return(targetQuantity(position) - sizeOf(position))
 }
 
 notice <- function(position) {
@@ -200,23 +190,25 @@ sellNotice <- function(size, instrument) {
 	paste("sell", size, instrument)
 }
 
-
-#' Position Status
-Stopped <- function() {
-	return("stopped")
-}
-
-Open <- function() {
-	return("open")
-}
-
-setMethod("status",
+setMethod("show",
 		signature("CurrentPosition"),
 		function(object) {
-			return(object@status)
+			
+			pos <- list(
+					instrument = instrumentOf(object),
+					state = class(status(object)), 
+					current.size = sizeOf(object), 
+					target.size = quantity(getTarget(object)), 
+					stop.point = getTarget(object)@stop.point
+					)
+			
+			pos <- pos[sapply(pos, length) == 1 & sapply(pos, class) != "S4"]
+			
+			print("Position:")
+			show(as.data.frame(pos))
+			print("Related orders:")
+			show(object@orders)
 		})
-
-
 
 
 

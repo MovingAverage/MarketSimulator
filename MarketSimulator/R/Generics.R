@@ -44,9 +44,34 @@ setGeneric("clearNotices",
 			standardGeneric("clearNotices")
 		})
 
+setGeneric("status",
+		function(object) {
+			standardGeneric("status")
+		})
+
+setGeneric("status<-",
+		function(object, value) {
+			standardGeneric("status<-")
+		})
+
+setGeneric("quantity",
+		function(object) {
+			return(object@quantity)
+		})
+
+setGeneric("quantity<-", 
+		function(object, value) {
+			object@quantity <- as.integer(value)
+			return(object)
+		})
+
 instrumentOf <- function(object, ...) {
 			return(object@instrument)
 		}
-
 		
+sizeOf <- function(object) {
+			size <- object@size
+			names(size) <- instrumentOf(object)
+			return(size)
+		}		
 		

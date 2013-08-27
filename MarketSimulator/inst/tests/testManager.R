@@ -103,8 +103,11 @@ context("Handling positions")
 	test_that("Creates new position when adding Target if needed", {
 				
 				manager <- Manager(Mock("Strategy"))
-				target <- Target("AMP", 100)
+				manager <- setupAccount(manager, 10000)
+				latestPrices(manager) <- c(AMP = 1)
+				target <- Target("AMP", 1)
 				manager <- addTarget(manager, target)
+				target <- setTargetQuantity(manager, target)
 				
 				expected.position <- Position("AMP")
 				expected.position@target <- target
@@ -119,13 +122,16 @@ context("Updating Positions")
 
 	test_that("If no transactions only latest price updated", {
 				
-				manager <- Manager(Mock("Strategy"))
+				strategy <- Mock("Strategy")
+				mockMethod(strategy, "targetPositions", list())
+				manager <- Manager(strategy)
 				
 				new.prices <- c(AMP = 10.5, BHP = 4.5)
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "getTransactions", list())
 				mockMethod(broker, "latestPrices", new.prices)
+				setTodaysDate(broker, "")
 				
 				manager <- updateRecords(manager, broker)
 				
@@ -139,7 +145,9 @@ context("Updating Positions")
 				latest.prices <- c(AMP = 10, BHP = 5)
 				amp.position <- Position("AMP", size = 100)
 				
-				manager <- Manager(Mock("Strategy"))
+				strategy <- Mock("Strategy")
+				mockMethod(strategy, "targetPositions", list())
+				manager <- Manager(strategy)
 				manager <- setPosition(manager, amp.position)
 				
 				amp.sell.order <- Order("AMP", sell = 100)
@@ -166,7 +174,9 @@ context("Updating Positions")
 				setTransactions(broker, list(order))
 				setLatestPrices(broker, numeric())
 				
-				manager <- Manager(Mock("Strategy"))
+				strategy <- Mock("Strategy")
+				mockMethod(strategy, "targetPositions", list())
+				manager <- Manager(strategy)
 				manager <- setPosition(manager, Position("AMP"))
 				
 				manager <- updateRecords(manager, broker)
@@ -186,7 +196,9 @@ context("Updating Positions")
 				setTransactions(broker, list(order))
 				setLatestPrices(broker, numeric())
 				
-				manager <- Manager(Mock("Strategy"))
+				strategy <- Mock("Strategy")
+				mockMethod(strategy, "targetPositions", list())
+				manager <- Manager(strategy)
 				manager <- setPosition(manager, Position("AMP", size = 100))
 				
 				manager <- updateRecords(manager, broker)
@@ -207,14 +219,16 @@ context("Updating Positions")
 				setTransactions(broker, list(order))
 				setLatestPrices(broker, numeric())
 				
-				manager <- Manager(Mock("Strategy"))
+				strategy <- Mock("Strategy")
+				mockMethod(strategy, "targetPositions", list())
+				manager <- Manager(strategy)
 				manager <- setPosition(manager, Position("AMP", size = 100))
 				
 				manager <- updateRecords(manager, broker)
 				
 				position <- getPosition(manager, "AMP")
 				
-				expect_that(status(position), matchesObject("stopped"))
+				expect_that(status(position), matchesObject(Stopped()))
 			})
 	
 	
@@ -225,40 +239,34 @@ context("Placing Orders")
 				broker <- Mock("Broker")
 				mockMethod(broker, "addOrder")
 				
-				targets <- list(Target("AMP", size = 1))
-				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", targets)
-				
 				position <- Position("AMP", size = 1000)
-				position <- setTarget(position, targets[[1]])
+				position <- setTarget(position, Target("AMP", size = 1))
+				status(position) <- Filled()
 				
-				manager <- Manager(strategy)
+				manager <- Manager(Mock("Strategy"))
 				latestPrices(manager) <- c(AMP = 5)
 				manager <- setupAccount(manager, 0)
 				manager <- setPosition(manager, position)
 				
-				manager <- placeOrders(manager, broker, timestamp = "")
+				manager <- placeOrders(manager, broker)
 				
 				expect_that(broker, not_called("addOrder"))
 			})
 	
 	test_that("Orders sent for all positions", {
 				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", 
-						list(Target("AMP", size = 0.5), Target("BHP", size = 0.4)))
-				
-				manager <- Manager(strategy)
+				manager <- Manager(Mock("Strategy"))
 				latestPrices(manager) <- c(AMP = 5, BHP = 10)
 				manager <- setupAccount(manager, 10000)
 				manager <- setPosition(manager, Position("AMP"))
 				manager <- setPosition(manager, Position("BHP"))
+				manager <- addTarget(manager, Target("AMP", size = 0.5))
+				manager <- addTarget(manager, Target("BHP", size = 0.4))
 				
 				broker <- Mock("Broker")
 				mockMethod(broker, "addOrder")
 				
-				manager <- placeOrders(manager, broker, timestamp = "")
+				manager <- placeOrders(manager, broker)
 				
 				expect_that(broker, has_calls(
 								addOrder(broker, Order("AMP", buy = 1000)), 

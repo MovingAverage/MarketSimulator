@@ -53,6 +53,7 @@ context("Order time stamping")
 						order.by = timestamp)
 				broker <- Mock("Broker")
 				mockMethod(broker, "closeOrder")
+				setTodaysDate(broker, timestamp)
 				
 				order <- Order("AMP", buy = 100)
 				notify(order, broker, price.bar)
@@ -60,6 +61,32 @@ context("Order time stamping")
 				notified.order <- get_call_argument(broker, "closeOrder", 1)
 				
 				expect_that(statusTime(notified.order), matchesObject(timestamp))
+			})
+	
+	test_that("Stop order status on day of execution", {
+				
+				trigger.price <- xts(10, order.by = as.Date("2007-01-01"))
+				price.bar <- c(11, 12, 8, 10, 1000)
+				names(price.bar) <- paste("AMP", 
+						c("Open", "High", "Low", "Close", "Volume"), 
+						sep = ".")
+				price.bar <- xts(t(price.bar), order.by = as.Date("2007-01-02"))
+				
+				order <- Stop("AMP", sell = 100, at = trigger.price)
+				submissionTime(order) <- index(trigger.price)
+				
+				broker <- Mock("Broker")
+				mockMethod(broker, "closeOrder")
+				setTodaysDate(broker, index(price.bar))
+				
+				expected <- order
+				expected@status <- ClosedStatus()
+				expected@execution.price <- limit_price(expected)
+				statusTime(expected) <- index(price.bar)
+				
+				notify(order, broker, price.bar)
+				
+				expect_that(broker, called_once_with("closeOrder", expected))
 			})
 	
 context("Order printing")
