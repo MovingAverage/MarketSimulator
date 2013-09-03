@@ -163,16 +163,6 @@ are_related <- function(order, price.bar) {
 	return(any(grepl(instrumentOf(order), names(price.bar))))
 }
 
-active_market <- function(price.bar) {
-	volume.ok <- not_NA_or_Zero(Vo(price.bar))
-	open.ok <- not_NA_or_Zero(Op(price.bar))
-	return(volume.ok & open.ok)
-}
-
-not_NA_or_Zero <- function(value) {
-	!(is.na(value) || value == 0 || length(value) == 0)
-}
-
 execute <- function(order, at, broker) {
 	order@execution.price <- at
 	order@status <- ClosedStatus()

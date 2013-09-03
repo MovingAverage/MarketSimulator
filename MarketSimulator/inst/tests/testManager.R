@@ -3,7 +3,7 @@
 
 context("__ Manager __")
 
-context("Interfacing with Strategy")
+context("Getting target positions")
 
 	test_that("Manager contacts Strategy for positions", {
 				
@@ -14,7 +14,19 @@ context("Interfacing with Strategy")
 				
 				expect_that(strategy, called_once("targetPositions"))
 			})
-
+	
+	test_that("Manager only returns target if valid latestPrices", {
+				
+				strategy <- Mock()
+				mockMethod(strategy, "targetPositions", list(amp = 1, bhp = 2, cba = 3))
+				manager <- Manager(strategy)
+				latestPrices(manager) <- c(amp = 10, bhp = 0, cba = NA)
+				targets <- targetPositions(manager, timestamp = "")
+				
+				expect_that(names(targets), matchesObject("amp"))
+			})
+	
+	
 context("Accounting calculations")
 	
 	test_that("Positions calculate current equity", {
@@ -131,7 +143,7 @@ context("Updating Positions")
 				broker <- Mock("Broker")
 				mockMethod(broker, "getTransactions", list())
 				mockMethod(broker, "latestPrices", new.prices)
-				setTodaysDate(broker, "")
+				setTodaysDate(broker, "2007-01-01")
 				
 				manager <- updateRecords(manager, broker)
 				

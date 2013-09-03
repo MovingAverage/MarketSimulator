@@ -39,6 +39,8 @@
 # 	DONE - Handle revising targets for Closed and Stopped orders
 # 	DONE - Close position instead of setting target of zero
 
+# 	Remove dependency of MarketSimulator on Strategies
+# 	Consider if TargetPositions should be moved to Strategies package.
 # 	Don't accept more orders if insufficient cash
 # 	Make Transactions object.
 # 	Handle multiple transactions on single instrument in day

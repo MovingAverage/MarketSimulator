@@ -20,11 +20,11 @@ Manager <- function(strategy) {
 	return(manager)
 }
 
-setMethod("targetPositions",
-		signature("Manager"),
-		function(object, timestamp) {
-			targetPositions(object@strategy, timestamp)
-		})
+targetPositions <- function(object, timestamp) {
+			targets <- targetPositions(object@strategy, timestamp)
+			prices <- latestPrices(object)[names(targets)]
+			return(targets[vapply(prices, not_NA_or_Zero, logical(1))])
+		}
 
 setupAccount <- function(manager, starting.equity) {
 	manager@account <- Account(starting.equity)

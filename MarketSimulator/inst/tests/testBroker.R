@@ -40,15 +40,16 @@ context("Reading market data")
 				ticker <- "AMP.AX"
 				AMP.AX <- loadStocks(ticker)[[1]]
 				timestamp <- "2010-01-04"
-				mockMethod(market, "getBar", AMP.AX[timestamp])
+				price.bar <- AMP.AX[timestamp]
+				mockMethod(market, "getBar", price.bar)
 				
 				broker <- Broker()
 				broker <- addMarket(broker, market)
 				
 				bar <- getBar(broker, ticker, timestamp)
 				
-				expect_that(today(broker), 
-						matchesObject(timestamp, ignore.attributes = FALSE))
+				expect_that(today(broker), matchesObject(as.POSIXct(index(price.bar)), 
+								ignore.attributes = FALSE))
 			})
 
 

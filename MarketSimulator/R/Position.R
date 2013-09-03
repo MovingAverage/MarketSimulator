@@ -6,7 +6,7 @@ setClass("CurrentPosition",
 			state = "PositionState", 
 			orders = "list", 
 			size = "numeric", 
-			target = "TargetPosition", 
+			target = "TargetPositionInterface", 
 			notice = "character"
 		))
 

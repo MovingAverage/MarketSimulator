@@ -13,7 +13,8 @@ Depends:
     R (>= 3.0.0),
     methods,
     quantmod,
-    DataHandlers
+    DataHandlers, 
+    Strategies
 Suggests:
     devtools,
     testthat
@@ -24,10 +25,10 @@ Collate:
     'Market.R'
     'Broker.R'
     'Account.R'
-    'TargetPosition.R'
     'PositionStatus.R'
+    'TargetPositionInterface.R'
     'Position.R'
     'Manager.R'
-	'Strategy.R'
     'BackTest.R'
+
 

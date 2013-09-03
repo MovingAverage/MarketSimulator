@@ -49,7 +49,10 @@ context("Order time stamping")
 	test_that("Order timestamped when status changed", {
 				
 				timestamp <- as.POSIXct("2010-04-21")
-				price.bar <- xts(t(c("AMP.Open" = 10, "AMP.Volume" = 1000)), 
+				price.bar <- xts(t(c(
+										"AMP.Open" = 10, 
+										"AMP.Volume" = 1000, 
+										"AMP.Close" = 10)), 
 						order.by = timestamp)
 				broker <- Mock("Broker")
 				mockMethod(broker, "closeOrder")

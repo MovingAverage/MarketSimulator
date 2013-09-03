@@ -46,8 +46,9 @@ addMarket <- function(broker, market) {
 setMethod("getBar",
 		signature("Broker"),
 		function(object, instrument, timestamp) {
-			setTodaysDate(object, timestamp)
-			getBar(object@market, instrument, timestamp)
+			bar <- getBar(object@market, instrument, timestamp)
+			setTodaysDate(object, index(bar))
+			return(bar)
 		})
 
 today <- function(broker) {
@@ -55,7 +56,7 @@ today <- function(broker) {
 }
 
 setTodaysDate <- function(broker, timestamp) {
-	assign("todays.date", timestamp, broker@transactions)
+	assign("todays.date", as.POSIXct(timestamp), broker@transactions)
 }
 
 addOrder <- function(broker, order) {

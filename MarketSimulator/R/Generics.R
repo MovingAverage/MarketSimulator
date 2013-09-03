@@ -24,11 +24,6 @@ setGeneric("tradeableInstruments",
 			standardGeneric("tradeableInstruments")
 		})
 
-setGeneric("targetPositions",
-		function(object, timestamp) {
-			standardGeneric("targetPositions")
-		})
-
 setGeneric("activeInstruments",
 		function(object, ...) {
 			standardGeneric("activeInstruments")
