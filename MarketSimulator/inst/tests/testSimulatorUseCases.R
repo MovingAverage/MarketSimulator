@@ -101,8 +101,8 @@ context("Price sequences")
 				broker <- Broker()
 				broker <- addMarket(broker, Market(list("AMP.AX" = days)))
 				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", 
+				strategy <- Mock("StrategyInterface")
+				mockMethod(strategy, "getTargets", 
 						list(AMP.AX = Target("AMP.AX", 1, 0.02)))
 				
 				manager <- Manager(strategy)

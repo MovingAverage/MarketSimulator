@@ -13,8 +13,7 @@ Depends:
     R (>= 3.0.0),
     methods,
     quantmod,
-    DataHandlers, 
-    Strategies
+    DataHandlers 
 Suggests:
     devtools,
     testthat
@@ -28,6 +27,7 @@ Collate:
     'PositionStatus.R'
     'TargetPositionInterface.R'
     'Position.R'
+    'StrategyInterface.R'
     'Manager.R'
     'BackTest.R'
 

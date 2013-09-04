@@ -90,7 +90,7 @@ context("Expected transaction value and size")
 				
 				latest.prices <- c(AMP = 5)
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				latestPrices(manager) <- latest.prices
 				manager <- setupAccount(manager, 10000)
 				manager <- setPosition(manager, Position("AMP"))
@@ -106,7 +106,7 @@ context("Expected transaction value and size")
 				
 				latest.prices <- c(AMP = 5)
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				latestPrices(manager) <- latest.prices
 				manager <- setupAccount(manager, 10000)
 				manager <- setPosition(manager, Position("AMP"))
@@ -121,7 +121,7 @@ context("Expected transaction value and size")
 				
 				latest.prices <- c(AMP = 5)
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				latestPrices(manager) <- latest.prices
 				manager <- setupAccount(manager, 8000)
 				manager <- setPosition(manager, Position("AMP", size = 400))
@@ -136,7 +136,7 @@ context("Expected transaction value and size")
 				
 				latest.prices <- c(AMP = 5)
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				latestPrices(manager) <- latest.prices
 				manager <- setupAccount(manager, 10000)
 				manager <- setPosition(manager, 
@@ -152,7 +152,7 @@ context("Expected transaction value and size")
 				
 				latest.prices <- c(AMP = 5)
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				latestPrices(manager) <- latest.prices
 				manager <- setupAccount(manager, 9000)
 				manager <- setPosition(manager, 
@@ -334,7 +334,7 @@ context("Sending orders to Broker")
 				mockMethod(broker, "addOrder")
 				mockMethod(broker, "cancelOrder")
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				manager <- setupAccount(manager, 10000)
 				
 				stop.order <- Stop("AMP", sell = 1000, at = xts())
@@ -478,7 +478,7 @@ context("Position state transitions")
 				position <- Position("AMP", size = 1000)
 				position@target <- Target("AMP", size = 1)
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				manager <- setupAccount(manager, 0)
 				latestPrices(manager) <- c("AMP" = 10)
 				manager <- setPosition(manager, position)

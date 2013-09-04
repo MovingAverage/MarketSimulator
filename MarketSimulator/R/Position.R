@@ -22,7 +22,7 @@ Position <- function(instrument, orders = list(), size = 0) {
 			stop("orders must be related to instrument")
 		}
 	}
-	position@target <- Target(instrument, size = 0)
+	position@target <- EmptyTarget(instrument)
 	position@state <- Open()
 	position@orders <- orders
 	position@size <- size

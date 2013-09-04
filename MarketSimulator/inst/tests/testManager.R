@@ -7,23 +7,36 @@ context("Getting target positions")
 
 	test_that("Manager contacts Strategy for positions", {
 				
-				strategy <- Mock()
-				mockMethod(strategy, "targetPositions")
+				strategy <- Mock("StrategyInterface")
+				mockMethod(strategy, "getTargets")
 				manager <- Manager(strategy)
 				targetPositions(manager, timestamp = "")
 				
-				expect_that(strategy, called_once("targetPositions"))
+				expect_that(strategy, called_once("getTargets"))
 			})
 	
 	test_that("Manager only returns target if valid latestPrices", {
 				
-				strategy <- Mock()
-				mockMethod(strategy, "targetPositions", list(amp = 1, bhp = 2, cba = 3))
+				strategy <- Mock("StrategyInterface")
+				mockMethod(strategy, "getTargets", list(amp = 1, bhp = 2, cba = 3))
 				manager <- Manager(strategy)
 				latestPrices(manager) <- c(amp = 10, bhp = 0, cba = NA)
 				targets <- targetPositions(manager, timestamp = "")
 				
 				expect_that(names(targets), matchesObject("amp"))
+			})
+
+	test_that("Target quantity set by Manager", {
+				
+				manager <- Manager(Mock("StrategyInterface"))
+				manager <- setupAccount(manager, 10000)
+				latestPrices(manager) <- c("AMP" = 5)
+				
+				target <- Target("AMP", size = 0.5)
+				
+				target <- setTargetQuantity(manager, target)
+				
+				expect_that(quantity(target), matchesObject(1000))
 			})
 	
 	
@@ -33,7 +46,7 @@ context("Accounting calculations")
 				
 				latest.prices <- c(AMP = 20, BHP = 10)
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				latestPrices(manager) <- latest.prices
 				manager <- setupAccount(manager, 5000)
 				manager <- setPosition(manager, Position("AMP", size = 100))
@@ -47,7 +60,7 @@ context("Determining viability of target")
 
 	test_that("Not viable if transaction value too low", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				
 				position <- Mock("CurrentPosition")
 				trade.value <- 1000
@@ -60,7 +73,7 @@ context("Determining viability of target")
 	
 	test_that("Transaction viable for bigger position", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				
 				position <- Mock("CurrentPosition")
 				trade.value <- 6000
@@ -73,7 +86,7 @@ context("Determining viability of target")
 	
 	test_that("Transaction not viable for small negative size", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				
 				position <- Mock("CurrentPosition")
 				trade.value <- -500
@@ -86,7 +99,7 @@ context("Determining viability of target")
 	
 	test_that("Transaction viable for large negative size", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				
 				position <- Mock("CurrentPosition")
 				trade.value <- -10000
@@ -103,7 +116,7 @@ context("Handling positions")
 	test_that("Manager reports on active instruments", {
 				
 				instruments <- c("AMP", "BHP", "CBA")
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				
 				for (instrument in instruments) {
 					manager <- setPosition(manager, Position(instrument))
@@ -114,7 +127,7 @@ context("Handling positions")
 	
 	test_that("Creates new position when adding Target if needed", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				manager <- setupAccount(manager, 10000)
 				latestPrices(manager) <- c(AMP = 1)
 				target <- Target("AMP", 1)
@@ -134,8 +147,8 @@ context("Updating Positions")
 
 	test_that("If no transactions only latest price updated", {
 				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", list())
+				strategy <- Mock("StrategyInterface")
+				mockMethod(strategy, "getTargets", list())
 				manager <- Manager(strategy)
 				
 				new.prices <- c(AMP = 10.5, BHP = 4.5)
@@ -157,8 +170,8 @@ context("Updating Positions")
 				latest.prices <- c(AMP = 10, BHP = 5)
 				amp.position <- Position("AMP", size = 100)
 				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", list())
+				strategy <- Mock("StrategyInterface")
+				mockMethod(strategy, "getTargets", list())
 				manager <- Manager(strategy)
 				manager <- setPosition(manager, amp.position)
 				
@@ -186,8 +199,8 @@ context("Updating Positions")
 				setTransactions(broker, list(order))
 				setLatestPrices(broker, numeric())
 				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", list())
+				strategy <- Mock("StrategyInterface")
+				mockMethod(strategy, "getTargets", list())
 				manager <- Manager(strategy)
 				manager <- setPosition(manager, Position("AMP"))
 				
@@ -208,8 +221,8 @@ context("Updating Positions")
 				setTransactions(broker, list(order))
 				setLatestPrices(broker, numeric())
 				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", list())
+				strategy <- Mock("StrategyInterface")
+				mockMethod(strategy, "getTargets", list())
 				manager <- Manager(strategy)
 				manager <- setPosition(manager, Position("AMP", size = 100))
 				
@@ -231,8 +244,8 @@ context("Updating Positions")
 				setTransactions(broker, list(order))
 				setLatestPrices(broker, numeric())
 				
-				strategy <- Mock("Strategy")
-				mockMethod(strategy, "targetPositions", list())
+				strategy <- Mock("StrategyInterface")
+				mockMethod(strategy, "getTargets", list())
 				manager <- Manager(strategy)
 				manager <- setPosition(manager, Position("AMP", size = 100))
 				
@@ -255,7 +268,7 @@ context("Placing Orders")
 				position <- setTarget(position, Target("AMP", size = 1))
 				status(position) <- Filled()
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				latestPrices(manager) <- c(AMP = 5)
 				manager <- setupAccount(manager, 0)
 				manager <- setPosition(manager, position)
@@ -267,7 +280,7 @@ context("Placing Orders")
 	
 	test_that("Orders sent for all positions", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				latestPrices(manager) <- c(AMP = 5, BHP = 10)
 				manager <- setupAccount(manager, 10000)
 				manager <- setPosition(manager, Position("AMP"))
@@ -290,7 +303,7 @@ context("Order notices")
 	
 	test_that("Multiple notices", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				
 				amp <- Position("AMP")
 				amp@target <- Target("AMP", 10)
@@ -308,7 +321,7 @@ context("Order notices")
 	
 	test_that("Two empty notices", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				manager <- setPosition(manager, Position("AMP"))
 				manager <- setPosition(manager, Position("BHP"))
 				
@@ -317,7 +330,7 @@ context("Order notices")
 	
 	test_that("One notice out of two", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				manager <- setPosition(manager, Position("AMP"))
 				
 				bhp <- Position("BHP")
@@ -329,7 +342,7 @@ context("Order notices")
 	
 	test_that("Manager clears notices after sending", {
 				
-				manager <- Manager(Mock("Strategy"))
+				manager <- Manager(Mock("StrategyInterface"))
 				
 				bhp <- Position("BHP")
 				bhp <- addNotice(bhp, 100)

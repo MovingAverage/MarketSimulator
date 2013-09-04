@@ -2,8 +2,7 @@
 #'
 
 load_all("D:/Code/R/Development/Packages/mockR")
-load_all("D:/Code/R/Development/Packages/Strategies")
-
+source("D:/Code/R/Development/Packages/MarketSimulator/inst/tests/ZZ_TestHelpers.R")
 
 
 

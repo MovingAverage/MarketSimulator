@@ -2,7 +2,7 @@
 #'
 setClass("Manager",
 		representation(
-			strategy = "ANY", 
+			strategy = "StrategyInterface", 
 			cost.model = "function", 
 			cost.threshold = "numeric", 
 			positions = "list", 
@@ -21,7 +21,7 @@ Manager <- function(strategy) {
 }
 
 targetPositions <- function(object, timestamp) {
-			targets <- targetPositions(object@strategy, timestamp)
+			targets <- getTargets(object@strategy, timestamp)
 			prices <- latestPrices(object)[names(targets)]
 			return(targets[vapply(prices, not_NA_or_Zero, logical(1))])
 		}
