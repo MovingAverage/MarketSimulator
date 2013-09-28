@@ -1,0 +1,28 @@
+Package: Strategies
+Type: Package
+Title: Trading Strategy objects and utilities
+Version: 0.0.1
+Date: 2013-08-29
+Author: Mark Hochguertel
+Maintainer: Mark Hochguertel <markhocky@gmail.com>
+Description: Objects for determining positions, and methods for calculating
+    performance.
+License: GPL-2
+LazyLoad: yes
+LazyData: yes
+Depends:
+    R (>= 3.0.0),
+    methods,
+    quantmod,
+    DataHandlers,
+    MarketSimulator
+Suggests:
+    devtools,
+    testthat,
+    mockR
+Collate:
+    'TradeStats.R'
+    'Strategy.R'
+    'EnsembleStrategy.R'
+    'TargetPosition.R'
+    'WeightedStrategy.R'
