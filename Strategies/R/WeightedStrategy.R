@@ -3,12 +3,12 @@
 
 setClass("WeightedStrategy",
 		representation(
-			base = "Strategy", 
-			weighting.fun = "function", 
-			weights = "xts"
+				base = "Strategy", 
+				weighting.fun = "function", 
+				weights = "xts"
 		),
 		contains = "Strategy")
-		
+
 Weighted <- function(base.strategy, weighting.fun = rolling_mean()) {
 	strategy <- new("WeightedStrategy")
 	strategy@base <- base.strategy
@@ -146,7 +146,7 @@ G_bytrade <- function(weight.pd = 40, threshold = 0.001) {
 	force(threshold)
 	
 	weighting.fun <- function(strategy, market) {
-		trade.returns <- trade_returns(strategy, market)
+		trade.returns <- trade_daily_returns(strategy, market)
 		cum.fun <- function(trade) exp(sum(log(trade + 1), na.rm = TRUE))
 		cum.returns <- lapply(trade.returns, function(trades) sapply(trades, cum.fun))
 		
@@ -192,7 +192,7 @@ EMA_filter <- function(ema.pd = 40) {
 		weights <- xts(, order.by = dates)
 		
 		for (inst in tradeableInstruments(market)) {
-			ema <- lag(EMA(Cl(market@instruments[[inst]]), ema.pd))
+			ema <- lag(EMA(Cl(market[inst]), ema.pd))
 			weights <- merge(weights, diff(ema) > 0)
 		}
 		colnames(weights) <- tradeableInstruments(market)
@@ -202,21 +202,26 @@ EMA_filter <- function(ema.pd = 40) {
 	return(weighting.fun)
 }
 
-
-weight_performance <- function(strategy, market) {
+Volatility_filter <- function(vol.pd = 20, vol.threshold = 0.2) {
 	
-	base.returns <- as.numeric(strat_returns(strategy@base, market))
-	groups <- as.factor(strategy@weights)
-	mean <- tapply(base.returns, groups, mean, na.rm = TRUE) * 250
-	sd <- tapply(base.returns, groups, sd, na.rm = TRUE) * sqrt(250)
-	G.fun <- function(r) sqrt((1 + mean(r, na.rm = TRUE)) ^ 2 - var(r, na.rm = TRUE))
-	G <- tapply(base.returns, groups, G.fun) ^ 250 - 1
-	results <- rbind(mean, sd, G)
-	rownames(results) <- c("mean", "sd", "G")
-	results
+	force(vol.pd)
+	force(vol.threshold)
+	
+	weighting.fun <- function(strategy, market) {
+		
+		dates <- index(dailyReturns(market))
+		weights <- xts(, order.by = dates)
+		
+		for (instrument in tradeableInstruments(market)) {
+			vol <- volatility(market[instrument], n = vol.pd)
+			weights <- merge(weights, vol > vol.threshold)
+		}
+		colnames(weights) <- tradeableInstruments(market)
+		weights <- by_trade_weight(weights, strategy)
+		return(weights)
+	}
+	return(weighting.fun)
 }
-
-
 
 
 

@@ -1,31 +1,6 @@
 #' 
 #' 
-#' Utility functions for examining trading performance
-
-strat_returns <- function(strategy, market, out.of.position = NA) {
-	
-	market.returns <- dailyReturns(market, type = "arithmetic")
-	positions <- lag(positions(strategy), 2)
-	strat.returns <- market.returns * positions
-	strat.returns[positions == 0] <- out.of.position
-	return(strat.returns)
-}
-
-net_strat_returns <- function(strategy, market, round.trip.cost = 0.002) {
-	strat.returns <- strat_returns(strategy, market)
-	cost.per.day <- round.trip.cost / median_trade_length(positions(strategy))
-	cost.per.day <- rep(cost.per.day, each = nrow(strat.returns))
-	return(strat.returns - cost.per.day)
-}
-
-trade_lengths <- function(positions) {
-	sequence <- sapply(positions, as_character_seq)
-	trades <- strsplit(sequence, "0")
-	trade.lengths <- lapply(trades, nchar)
-	trade.lengths <- lapply(trade.lengths, function(x) x[x != 0])
-	names(trade.lengths) <- names(positions)
-	return(trade.lengths)
-}
+#' Utility functions for examining performance by trade
 
 trade_start_indexes <- function(positions) {
 	sequence <- lapply(positions, as_character_seq)
@@ -50,7 +25,16 @@ trade_end_indexes <- function(positions) {
 	return(mapply(FUN, starts, lengths))
 }
 
-trade_returns <- function(strategy, market) {
+trade_lengths <- function(positions) {
+	sequence <- sapply(positions, as_character_seq)
+	trades <- strsplit(sequence, "0")
+	trade.lengths <- lapply(trades, nchar)
+	trade.lengths <- lapply(trade.lengths, function(x) x[x != 0])
+	names(trade.lengths) <- names(positions)
+	return(trade.lengths)
+}
+
+trade_daily_returns <- function(strategy, market) {
 	# TODO Profile this function to look for speed improvements
 	
 	returns <- dailyReturns(market, type = "arithmetic")
@@ -89,156 +73,91 @@ broomstick_plot <- function(trade.returns, instrument) {
 	
 }
 
-median_trade_length <- function(positions) {
-	sapply(trade_lengths(positions), median)
-}
-
-mean_intrade_returns <- function(strat.returns) {
-	apply(strat.returns, 2, mean, na.rm = TRUE)
-}
-
-sd_intrade_returns <- function(strat.returns) {
-	apply(strat.returns, 2, sd, na.rm = TRUE)
-}
-
-geom_intrade_returns <- function(strat.returns) {
-	mean.returns <- mean_intrade_returns(strat.returns)
-	sd.returns <- sd_intrade_returns(strat.returns)
-	geometric_returns(mean.returns, sd.returns)
-}
-
-geometric_returns <- function(mean, sd) {
-	sqrt((1 + mean) ^ 2 - sd ^ 2) - 1
-}
-
-mean_annual_returns <- function(strat.returns) {
-	strat.returns[is.na(strat.returns)] <- 0
-	returns <- apply(strat.returns, 2, mean)
-	returns * 250
-}
-
-sd_annual_returns <- function(strat.returns) {
-	strat.returns[is.na(strat.returns)] <- 0
-	returns <- apply(strat.returns, 2, sd)
-	returns * sqrt(250)
-}
-
-geom_annual_returns <- function(strat.returns) {
-	mean.returns <- mean_annual_returns(strat.returns)
-	sd.returns <- sd_annual_returns(strat.returns)
-	geometric_returns(mean.returns, sd.returns)
-}
-
-
-strategy_comparison <- function(strategies, market, metric = mean_intrade_returns) {
+trade_returns <- function(trade.daily.returns) {
 	
-	n.strats <- length(strategies)
+	overall.returns <- list()
+	sum.returns <- function(R) exp(sum(log(R + 1))) - 1
 	
-	strat.names <- names(strategies)
-	if (is.null(strat.names)) {
-		strat.names <- sapply(strategies, class)
+	for (instrument in names(trade.daily.returns)) {
+		returns <- trade.daily.returns[[instrument]]
+		overall.returns[[instrument]] <- sapply(returns, sum.returns)
 	}
+	return(overall.returns)
+}
+
+trade_entry_values <- function(positions, values, lag.n = 2) {
 	
-	strat.returns <- lapply(strategies, strat_returns, market = market)
-	strat.returns <- c(strat.returns, list(dailyReturns(market)))
-	strat.metrics <- lapply(strat.returns, metric)
+	positions <- lag(positions, lag.n)
+	values <- lag(values, lag.n)
+	start.indexes <- trade_start_indexes(positions)
+	entry.values <- list()
 	
-	summary.metric <- matrix(NA, nrow = n.strats + 1, ncol = length(strat.metrics[[1]]))
-	colnames(summary.metric) <- tradeableInstruments(market)
-	for (s in 1:nrow(summary.metric)) {
-		summary.metric[s, ] <- strat.metrics[[s]]
+	for (instrument in names(start.indexes)) {
+		indexes <- start.indexes[[instrument]]
+		entry.values[[instrument]] <- values[, instrument][indexes]
 	}
-	
-	rownames(summary.metric) <- c(strat.names, "Market")
-	
-	cols <- c(rainbow(n.strats, start = 0.6, end = 0.9, alpha = 0.4), "grey")
-	bdrs <- c(rainbow(n.strats, start = 0.6, end = 0.9), "black")
-	
-	strategy.summary <- list()
-	strategy.summary$data <- summary.metric
-	strategy.summary$metric <- metric
-	strategy.summary$colors <- cols
-	strategy.summary$borders <- bdrs
-	class(strategy.summary) <- "strategy_summary"
-	
-	return(strategy.summary)
+	return(entry.values)
 }
 
-barplot.strategy_summary <- function(height, legend.pos = "topright", ...) {
+returns_vs_filter <- function(strategy, market, filter) {
 	
-	barplot(height$data, beside = TRUE, cex.names = 0.8, 
-			col = height$colors, border = height$borders, 
-			names.arg = colnames(height$data), legend.text = rownames(height$data), 
-			args.legend = list(x = legend.pos), las = 3)
-}
-
-boxplot.strategy_summary <- function(x, ...) {
+	filter.values <- measures(filter)
 	
-	boxplot(t(x$data), col = x$colors, border = x$borders)
-	abline(h = 0)
-}
-
-returns_breakdown <- function(portfolio, time.pd = "2007::") {
-	require(lattice)
-	xyplot(getPortfolio(portfolio)$summary["2007::"], type = "h")
-}
-
-instrument_returns <- function(returns.list, instrument, time.pd = "2007::") {
-	
-	returns <- returns.list[["Market"]][, instrument][time.pd]
-	
-	for (strat.returns in returns.list[-1]) {
-		returns <- cbind(returns, strat.returns[, instrument][time.pd])
-	}
-	
-	names(returns) <- c(instrument, names(returns.list[-1]))
-	return(returns)
-}
-
-strategy_returns <- function(strategies, market) {
-	
-	returns <- list()
-	returns[["Market"]] <- dailyReturns(market)
-	
-	strat.names <- names(strategies)
-	if (is.null(strat.names)) {
-		strat.names <- sapply(strategies, class)
-	}
-	
-	for (strategy in strat.names) {
-		returns[[strategy]] <- strat_returns(strategies[[strategy]], market, 
-				out.of.position = 0)
-	}
-	return(returns)
-}
-
-combined_returns <- function(strategy, market) {
-	returns <- strat_returns(strategy, market)
-	xts(rowMeans(returns, na.rm = TRUE), order.by = index(returns))
-}
-
-equity_returns <- function(returns) {
-	returns[is.na(returns)] <- 0
-	exp(cumsum(log(returns + 1)))
-}
-
-overall_returns <- function(strategies, market, exclude = NULL) {
-	
-	if (!is.null(exclude)) {
-		exclude <- -1 * abs(exclude)
-		market.returns <- dailyReturns(market)[, exclude]
+	if (length(unique(filter.values)) > 10) {
+		filter.breaks <- quantile(filter.values, probs = seq(0, 1, 0.1), na.rm = TRUE)
+		filter.factor <- cut(filter.values, filter.breaks)
 	} else {
-		market.returns <- dailyReturns(market)
+		filter.factor <- factor(filter.values)
 	}
 	
-	rets <- xts(rowMeans(market.returns, na.rm = TRUE), order.by = index(market.returns))
+	filter.levels <- levels(filter.factor)
+	filter.values[] <- filter.factor
 	
-	for (strat in strategies) {
-		rets <- cbind(rets, combined_returns(strat, market))
-	}
-	names(rets) <- c("Mkt", names(strategies))
-	return(rets)
+	trade.returns <- trade_returns(trade_daily_returns(strategy, market))
+	filter.at.entry <- trade_entry_values(positions(strategy), filter.values, lag.n = 2)
+	filter.at.entry <- lapply(filter.at.entry, as.factor)
+	
+	summary <- list()
+	summary$returns <- trade.returns
+	summary$filter <- filter.at.entry
+	summary$levels <- filter.levels
+	summary$mean <- filter_apply(summary, mean, na.rm = TRUE)
+	summary$sd <- filter_apply(summary, sd, na.rm = TRUE)
+	summary$G <- geometric_returns(summary$mean, summary$sd)
+	class(summary) <- "filter_returns"
+	return(summary)
 }
+
+filter_apply <- function(filter.summary, FUN, ...) {
+	
+	instruments <- names(filter.summary$returns)
+	levels <- filter.summary$levels
+	
+	result <- array(NA, dim = c(length(instruments), length(levels)), 
+			dimnames = list(instruments = instruments, levels = levels))
+	
+	for (instrument in instruments) {
+		R <- filter.summary$returns[[instrument]]
+		F <- filter.summary$filter[[instrument]]
+		levels <- filter.summary$levels[as.numeric(levels(F))]
+		result[instrument, levels] <- tapply(R, F, FUN, ...)
+	}
+	return(result)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

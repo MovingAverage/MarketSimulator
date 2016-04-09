@@ -44,6 +44,67 @@ setMethod("makeOrder",
 			return(order)
 		})
 
+asDataFrame.Target <- function(x) {
+	target <- list(
+			instrument = instrumentOf(x), 
+			size = sizeOf(x), 
+			stop.point = x@stop.point, 
+			quantity = quantity(x))
+	
+	target <- target[sapply(target, length) == 1 & sapply(target, class) != "S4"]
+	
+	as.data.frame(target)
+}
+
+
+
+
+setMethod("show",
+		signature("TargetPosition"),
+		function(object) {
+			show(asDataFrame.Target(object))
+		})
+
+
+#' Breakout Target Position
+#' 
+#' This target position will enter the position if the price exceeds the limit set either
+#' at the open or high (low) of the trading day. This is used to enter the position only 
+#' if the price continues higher for example.
+#' 
+setClass("BreakoutTargetPosition",
+		representation(
+				limit = "xts"
+		),
+		contains = "TargetPosition")
+
+BreakoutTarget <- function(instrument, size, limit) {
+	
+	target <- new("BreakoutTargetPosition")
+	target@instrument <- instrument
+	target@size <- size
+	target@limit <- limit
+	return(target)
+}
+
+setMethod("makeOrder",
+		signature(target = "BreakoutTargetPosition"),
+		function(target, size) {
+			if (size > 0) {
+				order <- BreakoutLimit(instrumentOf(target), buy = size, 
+						at = target@limit)
+			} else {
+				order <- Order(instrumentOf(target), sell = size)
+			}
+		})
+
+
+
+
+
+
+
+
 
 
 

@@ -22,7 +22,10 @@ Suggests:
     mockR
 Collate:
     'TradeStats.R'
+    'TargetBuilder.R'
     'Strategy.R'
     'EnsembleStrategy.R'
     'TargetPosition.R'
     'WeightedStrategy.R'
+    'StrategyStats.R'
+    'Measures.R'
